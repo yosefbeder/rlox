@@ -128,6 +128,56 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
             tokens.push(Token::Slash);
             continue;
         }
+
+        // One or more character tokens
+        if ch == '!' {
+            if let Some('=') = chs.peek() {
+                chs.next();
+                tokens.push(Token::BangEqual);
+                continue;
+            }
+
+            tokens.push(Token::Bang);
+            continue;
+        }
+
+        if ch == '=' {
+            if let Some('=') = chs.peek() {
+                chs.next();
+                tokens.push(Token::EqualEqual);
+                continue;
+            }
+
+            tokens.push(Token::Equal);
+            continue;
+        }
+
+        if ch == '>' {
+            if let Some('=') = chs.peek() {
+                chs.next();
+                tokens.push(Token::GreaterEqual);
+                continue;
+            }
+
+            tokens.push(Token::Greater);
+            continue;
+        }
+
+        if ch == '<' {
+            if let Some('=') = chs.peek() {
+                chs.next();
+                tokens.push(Token::LessEqual);
+                continue;
+            }
+
+            tokens.push(Token::Less);
+            continue;
+        }
+
+        return Err(SyntaxError::new(
+            format!("Unexpected character {}", ch),
+            line,
+        ));
     }
 
     tokens.push(Token::End);
@@ -171,6 +221,24 @@ mod tests {
         assert_eq!(
             scan("#"),
             Err(SyntaxError::new(String::from("Unexpected character #"), 1))
+        )
+    }
+
+    #[test]
+    fn scans_one_or_more_character_tokens() {
+        assert_eq!(
+            scan("! != = == > >= < <="),
+            Ok(vec![
+                Token::Bang,
+                Token::BangEqual,
+                Token::Equal,
+                Token::EqualEqual,
+                Token::Greater,
+                Token::GreaterEqual,
+                Token::Less,
+                Token::LessEqual,
+                Token::End,
+            ])
         )
     }
 }
