@@ -204,6 +204,56 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
             continue;
         }
 
+        /*
+            * Numbers
+                - Allowed syntax: 44 44.0 44.12433
+                - Disalloed sytnax: .4 4.
+        */
+
+        if ch.is_ascii_digit() {
+            let mut value = String::from(ch);
+
+            // match the first part (the one before '.')
+            while let Some(ch) = chs.peek() {
+                if ch.is_ascii_digit() {
+                    value.push(*ch);
+                    chs.next();
+                    continue;
+                }
+                break;
+            }
+
+            if let Some('.') = chs.peek() {
+                chs.next();
+
+                if let Some(ch) = chs.peek() {
+                    // match the second part
+                    if ch.is_ascii_digit() {
+                        value.push('.');
+                        while let Some(ch) = chs.peek() {
+                            if ch.is_ascii_digit() {
+                                value.push(*ch);
+                                chs.next();
+                                continue;
+                            }
+                            break;
+                        }
+                    } else {
+                        tokens.push(Token::Number(value.parse().unwrap()));
+                        tokens.push(Token::Dot);
+                        continue;
+                    }
+                } else {
+                    tokens.push(Token::Number(value.parse().unwrap()));
+                    tokens.push(Token::Dot);
+                    continue;
+                }
+            }
+
+            tokens.push(Token::Number(value.parse().unwrap()));
+            continue;
+        }
+
         return Err(SyntaxError::new(
             format!("Unexpected character {}", ch),
             line,
@@ -294,6 +344,21 @@ mod tests {
                 Token::String(String::from("How are you my friend\n")),
                 Token::End
             ])
+        );
+    }
+
+    #[test]
+    fn scans_numbers() {
+        assert_eq!(scan("42"), Ok(vec![Token::Number(42.0), Token::End]));
+        assert_eq!(scan("42.0"), Ok(vec![Token::Number(42.0), Token::End]));
+        assert_eq!(scan("42.25"), Ok(vec![Token::Number(42.25), Token::End]));
+        assert_eq!(
+            scan("42."),
+            Ok(vec![Token::Number(42.0), Token::Dot, Token::End])
+        );
+        assert_eq!(
+            scan(".42"),
+            Ok(vec![Token::Dot, Token::Number(42.0), Token::End])
         );
     }
 }
