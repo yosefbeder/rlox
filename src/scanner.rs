@@ -1,6 +1,7 @@
 use super::SyntaxError;
+use std::collections::HashMap;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     // One character tokens
     LeftParen,
@@ -51,6 +52,25 @@ pub enum Token {
 }
 
 pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
+    let keywords_map = HashMap::from([
+        (String::from("and"), Token::And),
+        (String::from("class"), Token::Class),
+        (String::from("else"), Token::Else),
+        (String::from("false"), Token::False),
+        (String::from("fun"), Token::Fun),
+        (String::from("for"), Token::For),
+        (String::from("if"), Token::If),
+        (String::from("nil"), Token::Nil),
+        (String::from("or"), Token::Or),
+        (String::from("print"), Token::Print),
+        (String::from("return"), Token::Return),
+        (String::from("super"), Token::Super),
+        (String::from("this"), Token::This),
+        (String::from("true"), Token::True),
+        (String::from("var"), Token::Var),
+        (String::from("while"), Token::While),
+    ]);
+
     let mut tokens = vec![];
     let mut chs = code.chars().peekable();
     let mut line = 1;
@@ -176,8 +196,6 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
 
         // String literals
         if ch == '"' {
-            println!("Scanning a string literal {}", ch);
-
             let mut value = String::new();
             loop {
                 match chs.peek() {
@@ -251,6 +269,28 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
             }
 
             tokens.push(Token::Number(value.parse().unwrap()));
+            continue;
+        }
+
+        // Identifiers and keywords
+        if ch.is_ascii_alphabetic() {
+            let mut value = String::from(ch);
+
+            while let Some(ch) = chs.peek() {
+                if ch.is_ascii_alphabetic() {
+                    value.push(*ch);
+                    chs.next();
+                } else {
+                    break;
+                }
+            }
+
+            match keywords_map.get(&value) {
+                Some(keyword) => {
+                    tokens.push(keyword.clone());
+                }
+                None => tokens.push(Token::Identifier(value)),
+            }
             continue;
         }
 
@@ -360,5 +400,45 @@ mod tests {
             scan(".42"),
             Ok(vec![Token::Dot, Token::Number(42.0), Token::End])
         );
+    }
+
+    #[test]
+    fn scans_identifiers() {
+        assert_eq!(
+            scan("oranges"),
+            Ok(vec![Token::Identifier(String::from("oranges")), Token::End])
+        );
+        assert_eq!(
+            scan("apples"),
+            Ok(vec![Token::Identifier(String::from("apples")), Token::End])
+        );
+        assert_eq!(
+            scan("nile"),
+            Ok(vec![Token::Identifier(String::from("nile")), Token::End])
+        );
+        assert_eq!(
+            scan("falsely"),
+            Ok(vec![Token::Identifier(String::from("falsely")), Token::End])
+        )
+    }
+
+    #[test]
+    fn scans_keywords() {
+        assert_eq!(scan("and"), Ok(vec![Token::And, Token::End]));
+        assert_eq!(scan("class"), Ok(vec![Token::Class, Token::End]));
+        assert_eq!(scan("else"), Ok(vec![Token::Else, Token::End]));
+        assert_eq!(scan("false"), Ok(vec![Token::False, Token::End]));
+        assert_eq!(scan("fun"), Ok(vec![Token::Fun, Token::End]));
+        assert_eq!(scan("for"), Ok(vec![Token::For, Token::End]));
+        assert_eq!(scan("if"), Ok(vec![Token::If, Token::End]));
+        assert_eq!(scan("nil"), Ok(vec![Token::Nil, Token::End]));
+        assert_eq!(scan("or"), Ok(vec![Token::Or, Token::End]));
+        assert_eq!(scan("print"), Ok(vec![Token::Print, Token::End]));
+        assert_eq!(scan("return"), Ok(vec![Token::Return, Token::End]));
+        assert_eq!(scan("super"), Ok(vec![Token::Super, Token::End]));
+        assert_eq!(scan("this"), Ok(vec![Token::This, Token::End]));
+        assert_eq!(scan("true"), Ok(vec![Token::True, Token::End]));
+        assert_eq!(scan("var"), Ok(vec![Token::Var, Token::End]));
+        assert_eq!(scan("while"), Ok(vec![Token::While, Token::End]));
     }
 }
