@@ -273,11 +273,11 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
         }
 
         // Identifiers and keywords
-        if ch.is_ascii_alphabetic() {
+        if ch.is_ascii_alphabetic() || ch == '_' {
             let mut value = String::from(ch);
 
             while let Some(ch) = chs.peek() {
-                if ch.is_ascii_alphabetic() {
+                if ch.is_ascii_alphabetic() || *ch == '_' {
                     value.push(*ch);
                     chs.next();
                 } else {
@@ -419,7 +419,18 @@ mod tests {
         assert_eq!(
             scan("falsely"),
             Ok(vec![Token::Identifier(String::from("falsely")), Token::End])
-        )
+        );
+        assert_eq!(
+            scan("_i"),
+            Ok(vec![Token::Identifier(String::from("_i")), Token::End])
+        );
+        assert_eq!(
+            scan("strong_arms"),
+            Ok(vec![
+                Token::Identifier(String::from("strong_arms")),
+                Token::End
+            ])
+        );
     }
 
     #[test]
