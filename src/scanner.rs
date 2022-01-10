@@ -127,8 +127,9 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
             continue;
         }
 
-        // One character tokens > '/' and tokens
+        // One character tokens > '/'
         if ch == '/' {
+            // One-line comments
             if let Some('/') = chs.peek() {
                 loop {
                     if let Some(ch) = chs.next() {
@@ -140,6 +141,31 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
                         }
                     } else {
                         break;
+                    }
+                }
+                continue;
+            }
+
+            // Multi-line comments
+            if let Some('*') = chs.peek() {
+                loop {
+                    if let Some(ch) = chs.next() {
+                        if ch == '\n' {
+                            line += 1;
+                        }
+
+                        if ch == '*' {
+                            if let Some('/') = chs.peek() {
+                                chs.next();
+                                break;
+                            }
+                        }
+                        continue;
+                    } else {
+                        return Err(SyntaxError::new(
+                            String::from("Unterminated multi-line comment"),
+                            line,
+                        ));
                     }
                 }
                 continue;
@@ -334,6 +360,14 @@ mod tests {
     fn skips_comments() {
         assert_eq!(scan("// hi"), Ok(vec![Token::End]));
         assert_eq!(scan("// hi\n+"), Ok(vec![Token::Plus, Token::End]));
+        assert_eq!(scan("/* hi */\n+"), Ok(vec![Token::Plus, Token::End]));
+        assert_eq!(
+            scan("/* hi\n+"),
+            Err(SyntaxError::new(
+                String::from("Unterminated multi-line comment"),
+                2
+            ))
+        );
     }
 
     #[test]
