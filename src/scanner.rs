@@ -26,9 +26,9 @@ pub enum Token {
     LessEqual,
 
     // Literals
-    Identifier,
-    String,
-    Number,
+    String(String),
+    Number(f64),
+    Identifier(String),
 
     // Keywords
     And,
@@ -174,6 +174,36 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
             continue;
         }
 
+        // String literals
+        if ch == '"' {
+            println!("Scanning a string literal {}", ch);
+
+            let mut value = String::new();
+            loop {
+                match chs.peek() {
+                    Some(ch) => {
+                        if *ch == '"' {
+                            chs.next();
+                            tokens.push(Token::String(value));
+                            break;
+                        }
+
+                        if *ch == '\n' {
+                            line += 1;
+                        }
+
+                        value.push(*ch);
+                        chs.next();
+                        continue;
+                    }
+                    None => {
+                        return Err(SyntaxError::new(String::from("Unterminated string"), line))
+                    }
+                }
+            }
+            continue;
+        }
+
         return Err(SyntaxError::new(
             format!("Unexpected character {}", ch),
             line,
@@ -217,14 +247,6 @@ mod tests {
     }
 
     #[test]
-    fn throws_unexpected_character_errors() {
-        assert_eq!(
-            scan("#"),
-            Err(SyntaxError::new(String::from("Unexpected character #"), 1))
-        )
-    }
-
-    #[test]
     fn scans_one_or_more_character_tokens() {
         assert_eq!(
             scan("! != = == > >= < <="),
@@ -240,5 +262,38 @@ mod tests {
                 Token::End,
             ])
         )
+    }
+
+    #[test]
+    fn throws_unexpected_character_errors() {
+        assert_eq!(
+            scan("#"),
+            Err(SyntaxError::new(String::from("Unexpected character #"), 1))
+        )
+    }
+
+    #[test]
+    fn scans_string_literals() {
+        assert_eq!(
+            scan("\"How are you my friend\""),
+            Ok(vec![
+                Token::String(String::from("How are you my friend")),
+                Token::End
+            ])
+        );
+        assert_eq!(
+            scan("\"How are\n you my friend\""),
+            Ok(vec![
+                Token::String(String::from("How are\n you my friend")),
+                Token::End
+            ])
+        );
+        assert_eq!(
+            scan("\"How are you my friend\n\""),
+            Ok(vec![
+                Token::String(String::from("How are you my friend\n")),
+                Token::End
+            ])
+        );
     }
 }
