@@ -1,6 +1,7 @@
 use super::SyntaxError;
 use std::collections::HashMap;
 
+//TODO store the line in which each token appears
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     // One character tokens

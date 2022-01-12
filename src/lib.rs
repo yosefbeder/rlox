@@ -1,4 +1,5 @@
 use std::fmt;
+mod parser;
 mod scanner;
 
 #[derive(Debug, PartialEq)]
