@@ -1,9 +1,8 @@
 use super::SyntaxError;
 use std::collections::HashMap;
 
-//TODO store the line in which each token appears
 #[derive(Debug, PartialEq, Clone)]
-pub enum Token {
+pub enum TokenKind {
     // One character tokens
     LeftParen,
     RightParen,
@@ -52,24 +51,36 @@ pub enum Token {
     End,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+}
+
+impl Token {
+    pub fn new(kind: TokenKind, line: usize) -> Self {
+        Self { kind, line }
+    }
+}
+
 pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
     let keywords_map = HashMap::from([
-        (String::from("and"), Token::And),
-        (String::from("class"), Token::Class),
-        (String::from("else"), Token::Else),
-        (String::from("false"), Token::False),
-        (String::from("fun"), Token::Fun),
-        (String::from("for"), Token::For),
-        (String::from("if"), Token::If),
-        (String::from("nil"), Token::Nil),
-        (String::from("or"), Token::Or),
-        (String::from("print"), Token::Print),
-        (String::from("return"), Token::Return),
-        (String::from("super"), Token::Super),
-        (String::from("this"), Token::This),
-        (String::from("true"), Token::True),
-        (String::from("var"), Token::Var),
-        (String::from("while"), Token::While),
+        (String::from("and"), TokenKind::And),
+        (String::from("class"), TokenKind::Class),
+        (String::from("else"), TokenKind::Else),
+        (String::from("false"), TokenKind::False),
+        (String::from("fun"), TokenKind::Fun),
+        (String::from("for"), TokenKind::For),
+        (String::from("if"), TokenKind::If),
+        (String::from("nil"), TokenKind::Nil),
+        (String::from("or"), TokenKind::Or),
+        (String::from("print"), TokenKind::Print),
+        (String::from("return"), TokenKind::Return),
+        (String::from("super"), TokenKind::Super),
+        (String::from("this"), TokenKind::This),
+        (String::from("true"), TokenKind::True),
+        (String::from("var"), TokenKind::Var),
+        (String::from("while"), TokenKind::While),
     ]);
 
     let mut tokens = vec![];
@@ -88,43 +99,43 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
 
         // One character tokens
         if ch == '(' {
-            tokens.push(Token::LeftParen);
+            tokens.push(Token::new(TokenKind::LeftParen, line));
             continue;
         }
         if ch == ')' {
-            tokens.push(Token::RightParen);
+            tokens.push(Token::new(TokenKind::RightParen, line));
             continue;
         }
         if ch == '{' {
-            tokens.push(Token::LeftBrace);
+            tokens.push(Token::new(TokenKind::LeftBrace, line));
             continue;
         }
         if ch == '}' {
-            tokens.push(Token::RightBrace);
+            tokens.push(Token::new(TokenKind::RightBrace, line));
             continue;
         }
         if ch == ',' {
-            tokens.push(Token::Comma);
+            tokens.push(Token::new(TokenKind::Comma, line));
             continue;
         }
         if ch == '.' {
-            tokens.push(Token::Dot);
+            tokens.push(Token::new(TokenKind::Dot, line));
             continue;
         }
         if ch == '+' {
-            tokens.push(Token::Plus);
+            tokens.push(Token::new(TokenKind::Plus, line));
             continue;
         }
         if ch == '-' {
-            tokens.push(Token::Minus);
+            tokens.push(Token::new(TokenKind::Minus, line));
             continue;
         }
         if ch == '*' {
-            tokens.push(Token::Star);
+            tokens.push(Token::new(TokenKind::Star, line));
             continue;
         }
         if ch == ';' {
-            tokens.push(Token::Semicolon);
+            tokens.push(Token::new(TokenKind::Semicolon, line));
             continue;
         }
 
@@ -172,7 +183,7 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
                 continue;
             }
 
-            tokens.push(Token::Slash);
+            tokens.push(Token::new(TokenKind::Slash, line));
             continue;
         }
 
@@ -180,44 +191,44 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
         if ch == '!' {
             if let Some('=') = chs.peek() {
                 chs.next();
-                tokens.push(Token::BangEqual);
+                tokens.push(Token::new(TokenKind::BangEqual, line));
                 continue;
             }
 
-            tokens.push(Token::Bang);
+            tokens.push(Token::new(TokenKind::Bang, line));
             continue;
         }
 
         if ch == '=' {
             if let Some('=') = chs.peek() {
                 chs.next();
-                tokens.push(Token::EqualEqual);
+                tokens.push(Token::new(TokenKind::EqualEqual, line));
                 continue;
             }
 
-            tokens.push(Token::Equal);
+            tokens.push(Token::new(TokenKind::Equal, line));
             continue;
         }
 
         if ch == '>' {
             if let Some('=') = chs.peek() {
                 chs.next();
-                tokens.push(Token::GreaterEqual);
+                tokens.push(Token::new(TokenKind::GreaterEqual, line));
                 continue;
             }
 
-            tokens.push(Token::Greater);
+            tokens.push(Token::new(TokenKind::Greater, line));
             continue;
         }
 
         if ch == '<' {
             if let Some('=') = chs.peek() {
                 chs.next();
-                tokens.push(Token::LessEqual);
+                tokens.push(Token::new(TokenKind::LessEqual, line));
                 continue;
             }
 
-            tokens.push(Token::Less);
+            tokens.push(Token::new(TokenKind::Less, line));
             continue;
         }
 
@@ -229,7 +240,7 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
                     Some(ch) => {
                         if *ch == '"' {
                             chs.next();
-                            tokens.push(Token::String(value));
+                            tokens.push(Token::new(TokenKind::String(value), line));
                             break;
                         }
 
@@ -284,18 +295,18 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
                             break;
                         }
                     } else {
-                        tokens.push(Token::Number(value.parse().unwrap()));
-                        tokens.push(Token::Dot);
+                        tokens.push(Token::new(TokenKind::Number(value.parse().unwrap()), line));
+                        tokens.push(Token::new(TokenKind::Dot, line));
                         continue;
                     }
                 } else {
-                    tokens.push(Token::Number(value.parse().unwrap()));
-                    tokens.push(Token::Dot);
+                    tokens.push(Token::new(TokenKind::Number(value.parse().unwrap()), line));
+                    tokens.push(Token::new(TokenKind::Dot, line));
                     continue;
                 }
             }
 
-            tokens.push(Token::Number(value.parse().unwrap()));
+            tokens.push(Token::new(TokenKind::Number(value.parse().unwrap()), line));
             continue;
         }
 
@@ -314,9 +325,9 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
 
             match keywords_map.get(&value) {
                 Some(keyword) => {
-                    tokens.push(keyword.clone());
+                    tokens.push(Token::new(keyword.clone(), line));
                 }
-                None => tokens.push(Token::Identifier(value)),
+                None => tokens.push(Token::new(TokenKind::Identifier(value), line)),
             }
             continue;
         }
@@ -327,7 +338,7 @@ pub fn scan(code: &str) -> Result<Vec<Token>, SyntaxError> {
         ));
     }
 
-    tokens.push(Token::End);
+    tokens.push(Token::new(TokenKind::End, line));
 
     Ok(tokens)
 }
@@ -341,27 +352,39 @@ mod tests {
         assert_eq!(
             scan("(){},.+-*;/"),
             Ok(vec![
-                Token::LeftParen,
-                Token::RightParen,
-                Token::LeftBrace,
-                Token::RightBrace,
-                Token::Comma,
-                Token::Dot,
-                Token::Plus,
-                Token::Minus,
-                Token::Star,
-                Token::Semicolon,
-                Token::Slash,
-                Token::End,
+                Token::new(TokenKind::LeftParen, 1),
+                Token::new(TokenKind::RightParen, 1),
+                Token::new(TokenKind::LeftBrace, 1),
+                Token::new(TokenKind::RightBrace, 1),
+                Token::new(TokenKind::Comma, 1),
+                Token::new(TokenKind::Dot, 1),
+                Token::new(TokenKind::Plus, 1),
+                Token::new(TokenKind::Minus, 1),
+                Token::new(TokenKind::Star, 1),
+                Token::new(TokenKind::Semicolon, 1),
+                Token::new(TokenKind::Slash, 1),
+                Token::new(TokenKind::End, 1),
             ])
         )
     }
 
     #[test]
     fn skips_comments() {
-        assert_eq!(scan("// hi"), Ok(vec![Token::End]));
-        assert_eq!(scan("// hi\n+"), Ok(vec![Token::Plus, Token::End]));
-        assert_eq!(scan("/* hi */\n+"), Ok(vec![Token::Plus, Token::End]));
+        assert_eq!(scan("// hi"), Ok(vec![Token::new(TokenKind::End, 1)]));
+        assert_eq!(
+            scan("// hi\n+"),
+            Ok(vec![
+                Token::new(TokenKind::Plus, 2),
+                Token::new(TokenKind::End, 2)
+            ])
+        );
+        assert_eq!(
+            scan("/* hi */\n+"),
+            Ok(vec![
+                Token::new(TokenKind::Plus, 2),
+                Token::new(TokenKind::End, 2)
+            ])
+        );
         assert_eq!(
             scan("/* hi\n+"),
             Err(SyntaxError::new(
@@ -376,15 +399,15 @@ mod tests {
         assert_eq!(
             scan("! != = == > >= < <="),
             Ok(vec![
-                Token::Bang,
-                Token::BangEqual,
-                Token::Equal,
-                Token::EqualEqual,
-                Token::Greater,
-                Token::GreaterEqual,
-                Token::Less,
-                Token::LessEqual,
-                Token::End,
+                Token::new(TokenKind::Bang, 1),
+                Token::new(TokenKind::BangEqual, 1),
+                Token::new(TokenKind::Equal, 1),
+                Token::new(TokenKind::EqualEqual, 1),
+                Token::new(TokenKind::Greater, 1),
+                Token::new(TokenKind::GreaterEqual, 1),
+                Token::new(TokenKind::Less, 1),
+                Token::new(TokenKind::LessEqual, 1),
+                Token::new(TokenKind::End, 1),
             ])
         )
     }
@@ -402,38 +425,70 @@ mod tests {
         assert_eq!(
             scan("\"How are you my friend\""),
             Ok(vec![
-                Token::String(String::from("How are you my friend")),
-                Token::End
+                Token::new(TokenKind::String(String::from("How are you my friend")), 1),
+                Token::new(TokenKind::End, 1)
             ])
         );
         assert_eq!(
             scan("\"How are\n you my friend\""),
             Ok(vec![
-                Token::String(String::from("How are\n you my friend")),
-                Token::End
+                Token::new(
+                    TokenKind::String(String::from("How are\n you my friend")),
+                    2
+                ),
+                Token::new(TokenKind::End, 2)
             ])
         );
         assert_eq!(
             scan("\"How are you my friend\n\""),
             Ok(vec![
-                Token::String(String::from("How are you my friend\n")),
-                Token::End
+                Token::new(
+                    TokenKind::String(String::from("How are you my friend\n")),
+                    2
+                ),
+                Token::new(TokenKind::End, 2)
             ])
         );
     }
 
     #[test]
     fn scans_numbers() {
-        assert_eq!(scan("42"), Ok(vec![Token::Number(42.0), Token::End]));
-        assert_eq!(scan("42.0"), Ok(vec![Token::Number(42.0), Token::End]));
-        assert_eq!(scan("42.25"), Ok(vec![Token::Number(42.25), Token::End]));
+        assert_eq!(
+            scan("42"),
+            Ok(vec![
+                Token::new(TokenKind::Number(42.0), 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("42.0"),
+            Ok(vec![
+                Token::new(TokenKind::Number(42.0), 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("42.25"),
+            Ok(vec![
+                Token::new(TokenKind::Number(42.25), 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
         assert_eq!(
             scan("42."),
-            Ok(vec![Token::Number(42.0), Token::Dot, Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Number(42.0), 1),
+                Token::new(TokenKind::Dot, 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan(".42"),
-            Ok(vec![Token::Dot, Token::Number(42.0), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Dot, 1),
+                Token::new(TokenKind::Number(42.0), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
     }
 
@@ -441,50 +496,161 @@ mod tests {
     fn scans_identifiers() {
         assert_eq!(
             scan("oranges"),
-            Ok(vec![Token::Identifier(String::from("oranges")), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Identifier(String::from("oranges")), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan("apples"),
-            Ok(vec![Token::Identifier(String::from("apples")), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Identifier(String::from("apples")), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan("nile"),
-            Ok(vec![Token::Identifier(String::from("nile")), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Identifier(String::from("nile")), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan("falsely"),
-            Ok(vec![Token::Identifier(String::from("falsely")), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Identifier(String::from("falsely")), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan("_i"),
-            Ok(vec![Token::Identifier(String::from("_i")), Token::End])
+            Ok(vec![
+                Token::new(TokenKind::Identifier(String::from("_i")), 1),
+                Token::new(TokenKind::End, 1)
+            ])
         );
         assert_eq!(
             scan("strong_arms"),
             Ok(vec![
-                Token::Identifier(String::from("strong_arms")),
-                Token::End
+                Token::new(TokenKind::Identifier(String::from("strong_arms")), 1),
+                Token::new(TokenKind::End, 1)
             ])
         );
     }
 
     #[test]
     fn scans_keywords() {
-        assert_eq!(scan("and"), Ok(vec![Token::And, Token::End]));
-        assert_eq!(scan("class"), Ok(vec![Token::Class, Token::End]));
-        assert_eq!(scan("else"), Ok(vec![Token::Else, Token::End]));
-        assert_eq!(scan("false"), Ok(vec![Token::False, Token::End]));
-        assert_eq!(scan("fun"), Ok(vec![Token::Fun, Token::End]));
-        assert_eq!(scan("for"), Ok(vec![Token::For, Token::End]));
-        assert_eq!(scan("if"), Ok(vec![Token::If, Token::End]));
-        assert_eq!(scan("nil"), Ok(vec![Token::Nil, Token::End]));
-        assert_eq!(scan("or"), Ok(vec![Token::Or, Token::End]));
-        assert_eq!(scan("print"), Ok(vec![Token::Print, Token::End]));
-        assert_eq!(scan("return"), Ok(vec![Token::Return, Token::End]));
-        assert_eq!(scan("super"), Ok(vec![Token::Super, Token::End]));
-        assert_eq!(scan("this"), Ok(vec![Token::This, Token::End]));
-        assert_eq!(scan("true"), Ok(vec![Token::True, Token::End]));
-        assert_eq!(scan("var"), Ok(vec![Token::Var, Token::End]));
-        assert_eq!(scan("while"), Ok(vec![Token::While, Token::End]));
+        assert_eq!(
+            scan("and"),
+            Ok(vec![
+                Token::new(TokenKind::And, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("class"),
+            Ok(vec![
+                Token::new(TokenKind::Class, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("else"),
+            Ok(vec![
+                Token::new(TokenKind::Else, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("false"),
+            Ok(vec![
+                Token::new(TokenKind::False, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("fun"),
+            Ok(vec![
+                Token::new(TokenKind::Fun, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("for"),
+            Ok(vec![
+                Token::new(TokenKind::For, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("if"),
+            Ok(vec![
+                Token::new(TokenKind::If, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("nil"),
+            Ok(vec![
+                Token::new(TokenKind::Nil, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("or"),
+            Ok(vec![
+                Token::new(TokenKind::Or, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("print"),
+            Ok(vec![
+                Token::new(TokenKind::Print, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("return"),
+            Ok(vec![
+                Token::new(TokenKind::Return, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("super"),
+            Ok(vec![
+                Token::new(TokenKind::Super, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("this"),
+            Ok(vec![
+                Token::new(TokenKind::This, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("true"),
+            Ok(vec![
+                Token::new(TokenKind::True, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("var"),
+            Ok(vec![
+                Token::new(TokenKind::Var, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
+        assert_eq!(
+            scan("while"),
+            Ok(vec![
+                Token::new(TokenKind::While, 1),
+                Token::new(TokenKind::End, 1)
+            ])
+        );
     }
 }

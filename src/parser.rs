@@ -1,4 +1,6 @@
 use super::scanner::Token;
+use super::scanner::TokenKind;
+use super::SyntaxError;
 use std::convert::TryFrom;
 use std::iter::Peekable;
 use std::slice::Iter;
@@ -38,17 +40,17 @@ impl Literal {
     }
 }
 
-impl TryFrom<Token> for Literal {
+impl TryFrom<TokenKind> for Literal {
     type Error = String;
 
-    fn try_from(token: Token) -> Result<Self, Self::Error> {
+    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
         match token {
-            Token::String(value) => Ok(Self::String(value)),
-            Token::Number(value) => Ok(Self::Number(value)),
-            Token::Identifier(value) => Ok(Self::Identifier(value)),
-            Token::True => Ok(Self::True),
-            Token::False => Ok(Self::False),
-            Token::Nil => Ok(Self::Nil),
+            TokenKind::String(value) => Ok(Self::String(value)),
+            TokenKind::Number(value) => Ok(Self::Number(value)),
+            TokenKind::Identifier(value) => Ok(Self::Identifier(value)),
+            TokenKind::True => Ok(Self::True),
+            TokenKind::False => Ok(Self::False),
+            TokenKind::Nil => Ok(Self::Nil),
             _ => Err(format!("Couldn't convert {:?} token to literal", token)),
         }
     }
@@ -69,13 +71,13 @@ impl UnaryOperator {
     }
 }
 
-impl TryFrom<Token> for UnaryOperator {
+impl TryFrom<TokenKind> for UnaryOperator {
     type Error = String;
 
-    fn try_from(token: Token) -> Result<Self, Self::Error> {
+    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
         match token {
-            Token::Bang => Ok(Self::Bang),
-            Token::Minus => Ok(Self::Minus),
+            TokenKind::Bang => Ok(Self::Bang),
+            TokenKind::Minus => Ok(Self::Minus),
             _ => Err(format!(
                 "Couldn't convert {:?} token to a unary operator",
                 token
@@ -115,21 +117,21 @@ impl BinaryOperator {
     }
 }
 
-impl TryFrom<Token> for BinaryOperator {
+impl TryFrom<TokenKind> for BinaryOperator {
     type Error = String;
 
-    fn try_from(token: Token) -> Result<Self, Self::Error> {
+    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
         match token {
-            Token::Plus => Ok(Self::Plus),
-            Token::Minus => Ok(Self::Minus),
-            Token::Star => Ok(Self::Star),
-            Token::Slash => Ok(Self::Slash),
-            Token::BangEqual => Ok(Self::BangEqual),
-            Token::EqualEqual => Ok(Self::EqualEqual),
-            Token::Greater => Ok(Self::Greater),
-            Token::GreaterEqual => Ok(Self::GreaterEqual),
-            Token::Less => Ok(Self::Less),
-            Token::LessEqual => Ok(Self::LessEqual),
+            TokenKind::Plus => Ok(Self::Plus),
+            TokenKind::Minus => Ok(Self::Minus),
+            TokenKind::Star => Ok(Self::Star),
+            TokenKind::Slash => Ok(Self::Slash),
+            TokenKind::BangEqual => Ok(Self::BangEqual),
+            TokenKind::EqualEqual => Ok(Self::EqualEqual),
+            TokenKind::Greater => Ok(Self::Greater),
+            TokenKind::GreaterEqual => Ok(Self::GreaterEqual),
+            TokenKind::Less => Ok(Self::Less),
+            TokenKind::LessEqual => Ok(Self::LessEqual),
             _ => Err(format!(
                 "Couldn't convert {:?} token to a binary operator",
                 token
@@ -168,47 +170,39 @@ impl Expr {
     }
 }
 
-fn expect(expected_token: Token, tokens_iter: &mut Peekable<Iter<Token>>) -> Result<(), String> {
-    if let Some(token) = tokens_iter.next() {
-        if expected_token == token.clone() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Expected {:?} token, but got {:?} token",
-                expected_token, token
-            ))
-        }
-    } else {
-        Err(format!(
-            "Expected {:?} token, but got nothing",
-            expected_token
-        ))
-    }
-}
-
-fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let token = tokens_iter.next().unwrap();
 
-    if let Ok(literal) = Literal::try_from(token.clone()) {
+    if let Ok(literal) = Literal::try_from(token.kind.clone()) {
         Ok(Expr::Literal(literal))
     } else {
-        match token {
-            Token::LeftParen => {
-               let expression = parse_expression(tokens_iter)?;
-               expect(Token::RightParen, tokens_iter)?;
-               Ok(expression)
-            },
-            token => Err(format!(
-                "Expected a literal value or an expression wrapped inside parentheses, but got {:?} token", token
+        match token.kind {
+            TokenKind::LeftParen => {
+                let expression = parse_expression(tokens_iter)?;
+
+                let next_token = tokens_iter.next().unwrap();
+
+                if next_token.kind == TokenKind::RightParen {
+                    Ok(expression)
+                } else {
+                    Err(SyntaxError::new(
+                        String::from("Expected a closing parenthese"),
+                        next_token.line,
+                    ))
+                }
+            }
+            _ => Err(SyntaxError::new(
+                String::from("Expected an expression"),
+                token.line,
             )),
         }
     }
 }
 
-fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let token = tokens_iter.peek().unwrap();
 
-    if let Ok(unary_operator) = UnaryOperator::try_from(token.clone().clone()) {
+    if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
         tokens_iter.next();
         Ok(Expr::Unary(
             unary_operator,
@@ -219,11 +213,11 @@ fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> 
     }
 }
 
-fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut factor = parse_unary(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
-        if let Ok(binary_operator) = BinaryOperator::try_from(token.clone().clone()) {
+        if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Star => {
                     tokens_iter.next();
@@ -249,11 +243,11 @@ fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String>
     Ok(factor)
 }
 
-fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut term = parse_factor(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
-        if let Ok(binary_operator) = BinaryOperator::try_from(token.clone().clone()) {
+        if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Plus => {
                     tokens_iter.next();
@@ -279,11 +273,11 @@ fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
     Ok(term)
 }
 
-fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut comparison = parse_term(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
-        if let Ok(binary_operator) = BinaryOperator::try_from(token.clone().clone()) {
+        if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Greater => {
                     tokens_iter.next();
@@ -337,11 +331,11 @@ fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Str
     Ok(comparison)
 }
 
-fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut equality = parse_comparison(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
-        if let Ok(binary_operator) = BinaryOperator::try_from(token.clone().clone()) {
+        if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::BangEqual => {
                     tokens_iter.next();
@@ -369,16 +363,15 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Strin
     Ok(equality)
 }
 
-fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, String> {
+fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let expression = parse_equality(tokens_iter)?;
 
     Ok(expression)
 }
 
-pub fn parse(tokens: &[Token]) -> Result<Expr, String> {
+pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
     let mut tokens_iter = tokens.iter().peekable();
     let expression = parse_expression(&mut tokens_iter)?;
-    expect(Token::End, &mut tokens_iter)?;
     Ok(expression)
 }
 
@@ -414,12 +407,19 @@ mod tests {
     #[test]
     fn parses_with_correct_precendence() {
         // 4
-        let tokens = vec![Token::Number(4.0), Token::End];
+        let tokens = vec![
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::End, 1),
+        ];
 
         assert_eq!(parse(&tokens), Ok(Expr::Literal(Literal::Number(4.0))));
 
         // - 4
-        let tokens = vec![Token::Minus, Token::Number(4.0), Token::End];
+        let tokens = vec![
+            Token::new(TokenKind::Minus, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::End, 1),
+        ];
 
         assert_eq!(
             parse(&tokens),
@@ -430,7 +430,12 @@ mod tests {
         );
 
         //ignore !!true
-        let tokens = vec![Token::Bang, Token::Bang, Token::True, Token::End];
+        let tokens = vec![
+            Token::new(TokenKind::Bang, 1),
+            Token::new(TokenKind::Bang, 1),
+            Token::new(TokenKind::True, 1),
+            Token::new(TokenKind::End, 1),
+        ];
 
         assert_eq!(
             parse(&tokens),
@@ -445,10 +450,10 @@ mod tests {
 
         // 4 * 3
         let tokens = vec![
-            Token::Number(4.0),
-            Token::Star,
-            Token::Number(3.0),
-            Token::End,
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -462,10 +467,10 @@ mod tests {
 
         // 4 + 3
         let tokens = vec![
-            Token::Number(4.0),
-            Token::Plus,
-            Token::Number(3.0),
-            Token::End,
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Plus, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -479,10 +484,10 @@ mod tests {
 
         // 4 > 3
         let tokens = vec![
-            Token::Number(4.0),
-            Token::Greater,
-            Token::Number(3.0),
-            Token::End,
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Greater, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -496,10 +501,10 @@ mod tests {
 
         // 4 == 3
         let tokens = vec![
-            Token::Number(4.0),
-            Token::EqualEqual,
-            Token::Number(3.0),
-            Token::End,
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::EqualEqual, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -512,15 +517,15 @@ mod tests {
         );
         // 4 * 3 - 2 > -13 == true
         let tokens = vec![
-            Token::Number(4.0),
-            Token::Star,
-            Token::Number(3.0),
-            Token::Minus,
-            Token::Number(2.0),
-            Token::Greater,
-            Token::Minus,
-            Token::Number(13.0),
-            Token::End,
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Minus, 1),
+            Token::new(TokenKind::Number(2.0), 1),
+            Token::new(TokenKind::Greater, 1),
+            Token::new(TokenKind::Minus, 1),
+            Token::new(TokenKind::Number(13.0), 1),
+            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
