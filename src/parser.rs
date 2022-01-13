@@ -407,10 +407,7 @@ mod tests {
     #[test]
     fn parses_with_correct_precendence() {
         // 4
-        let tokens = vec![
-            Token::new(TokenKind::Number(4.0), 1),
-            Token::new(TokenKind::End, 1),
-        ];
+        let tokens = vec![Token::new(TokenKind::Number(4.0), 1)];
 
         assert_eq!(parse(&tokens), Ok(Expr::Literal(Literal::Number(4.0))));
 
@@ -418,7 +415,6 @@ mod tests {
         let tokens = vec![
             Token::new(TokenKind::Minus, 1),
             Token::new(TokenKind::Number(4.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -434,7 +430,6 @@ mod tests {
             Token::new(TokenKind::Bang, 1),
             Token::new(TokenKind::Bang, 1),
             Token::new(TokenKind::True, 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -453,7 +448,6 @@ mod tests {
             Token::new(TokenKind::Number(4.0), 1),
             Token::new(TokenKind::Star, 1),
             Token::new(TokenKind::Number(3.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -470,7 +464,6 @@ mod tests {
             Token::new(TokenKind::Number(4.0), 1),
             Token::new(TokenKind::Plus, 1),
             Token::new(TokenKind::Number(3.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -487,7 +480,6 @@ mod tests {
             Token::new(TokenKind::Number(4.0), 1),
             Token::new(TokenKind::Greater, 1),
             Token::new(TokenKind::Number(3.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -504,7 +496,6 @@ mod tests {
             Token::new(TokenKind::Number(4.0), 1),
             Token::new(TokenKind::EqualEqual, 1),
             Token::new(TokenKind::Number(3.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
@@ -515,6 +506,28 @@ mod tests {
                 Box::new(Expr::Literal(Literal::Number(3.0))),
             ))
         );
+
+        // 4 * (3 + 2)
+        let tokens = vec![
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::LeftParen, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Plus, 1),
+            Token::new(TokenKind::Number(2.0), 1),
+            Token::new(TokenKind::RightParen, 1),
+        ];
+
+        assert_eq!(
+            parse(&tokens),
+            Ok(Expr::Binary(
+                BinaryOperator::Star,
+                Box::new(Expr::Literal(Literal::Number(4.0))),
+                Box::new(Expr::Literal(Literal::Number(3.0)))
+            ))
+        );
+
         // 4 * 3 - 2 > -13 == true
         let tokens = vec![
             Token::new(TokenKind::Number(4.0), 1),
@@ -525,7 +538,6 @@ mod tests {
             Token::new(TokenKind::Greater, 1),
             Token::new(TokenKind::Minus, 1),
             Token::new(TokenKind::Number(13.0), 1),
-            Token::new(TokenKind::End, 1),
         ];
 
         assert_eq!(
