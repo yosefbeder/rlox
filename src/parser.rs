@@ -5,8 +5,11 @@ use std::convert::TryFrom;
 use std::iter::Peekable;
 use std::slice::Iter;
 
+// comma -> expression "," expression "," expression
+
 /*
     GRAMMAR
+        comma -> expression ("," expression)*
         expression -> equality
         equality -> comparison (("==" | "!=") comparison)*
         comparison -> term ((">" | ">=" | "<" | "<=") term)*
@@ -98,6 +101,7 @@ enum BinaryOperator {
     GreaterEqual,
     Less,
     LessEqual,
+    Comma,
 }
 
 impl BinaryOperator {
@@ -113,6 +117,7 @@ impl BinaryOperator {
             Self::GreaterEqual => ">=",
             Self::Less => "<",
             Self::LessEqual => "<=",
+            Self::Comma => ",",
         }
     }
 }
@@ -132,6 +137,7 @@ impl TryFrom<TokenKind> for BinaryOperator {
             TokenKind::GreaterEqual => Ok(Self::GreaterEqual),
             TokenKind::Less => Ok(Self::Less),
             TokenKind::LessEqual => Ok(Self::LessEqual),
+            TokenKind::Comma => Ok(Self::Comma),
             _ => Err(format!(
                 "Couldn't convert {:?} token to a binary operator",
                 token
@@ -370,10 +376,38 @@ fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syn
     Ok(expression)
 }
 
+fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+    let mut expression = parse_expression(tokens_iter)?;
+
+    while let Some(token) = tokens_iter.peek() {
+        if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
+            match binary_operator {
+                BinaryOperator::Comma => {
+                    tokens_iter.next();
+                    let expression_1 = parse_expression(tokens_iter)?;
+
+                    expression = Expr::Binary(
+                        binary_operator,
+                        Box::new(expression),
+                        Box::new(expression_1),
+                    );
+                }
+                _ => {
+                    break;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    Ok(expression)
+}
+
 pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
     let mut tokens_iter = tokens.iter().peekable();
-    let expression = parse_expression(&mut tokens_iter)?;
-    Ok(expression)
+    let comma = parse_comma(&mut tokens_iter)?;
+    Ok(comma)
 }
 
 #[cfg(test)]
@@ -529,7 +563,35 @@ mod tests {
             ))
         );
 
-        // 4 * 3 - 2 > -13 == true
+        // 4, 3, 4 == 3
+        let tokens = vec![
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Comma, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Comma, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::EqualEqual, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+        ];
+
+        assert_eq!(
+            parse(&tokens),
+            Ok(Expr::Binary(
+                BinaryOperator::Comma,
+                Box::new(Expr::Binary(
+                    BinaryOperator::Comma,
+                    Box::new(Expr::Literal(Literal::Number(4.0))),
+                    Box::new(Expr::Literal(Literal::Number(3.0))),
+                )),
+                Box::new(Expr::Binary(
+                    BinaryOperator::EqualEqual,
+                    Box::new(Expr::Literal(Literal::Number(4.0))),
+                    Box::new(Expr::Literal(Literal::Number(3.0))),
+                ))
+            ))
+        );
+
+        // 4 * 3 - 2 > -13 == true, false
         let tokens = vec![
             Token::new(TokenKind::Number(4.0), 1),
             Token::new(TokenKind::Star, 1),
@@ -539,25 +601,31 @@ mod tests {
             Token::new(TokenKind::Greater, 1),
             Token::new(TokenKind::Minus, 1),
             Token::new(TokenKind::Number(13.0), 1),
+            Token::new(TokenKind::Comma, 1),
+            Token::new(TokenKind::False, 1),
         ];
 
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
-                BinaryOperator::Greater,
+                BinaryOperator::Comma,
                 Box::new(Expr::Binary(
-                    BinaryOperator::Minus,
+                    BinaryOperator::Greater,
                     Box::new(Expr::Binary(
-                        BinaryOperator::Star,
-                        Box::new(Expr::Literal(Literal::Number(4.0))),
-                        Box::new(Expr::Literal(Literal::Number(3.0))),
+                        BinaryOperator::Minus,
+                        Box::new(Expr::Binary(
+                            BinaryOperator::Star,
+                            Box::new(Expr::Literal(Literal::Number(4.0))),
+                            Box::new(Expr::Literal(Literal::Number(3.0))),
+                        )),
+                        Box::new(Expr::Literal(Literal::Number(2.0))),
                     )),
-                    Box::new(Expr::Literal(Literal::Number(2.0))),
+                    Box::new(Expr::Unary(
+                        UnaryOperator::Minus,
+                        Box::new(Expr::Literal(Literal::Number(13.0)))
+                    ))
                 )),
-                Box::new(Expr::Unary(
-                    UnaryOperator::Minus,
-                    Box::new(Expr::Literal(Literal::Number(13.0)))
-                ))
+                Box::new(Expr::Literal(Literal::False))
             )),
         );
     }
