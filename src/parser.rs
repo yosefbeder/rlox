@@ -228,15 +228,15 @@ fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxE
             match binary_operator {
                 BinaryOperator::Star => {
                     tokens_iter.next();
-                    let factor_1 = parse_unary(tokens_iter)?;
+                    let unary = parse_unary(tokens_iter)?;
 
-                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(factor_1));
+                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(unary));
                 }
                 BinaryOperator::Slash => {
                     tokens_iter.next();
-                    let factor_1 = parse_unary(tokens_iter)?;
+                    let unary = parse_unary(tokens_iter)?;
 
-                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(factor_1));
+                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(unary));
                 }
                 _ => {
                     break;
@@ -258,15 +258,15 @@ fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxErr
             match binary_operator {
                 BinaryOperator::Plus => {
                     tokens_iter.next();
-                    let term_1 = parse_factor(tokens_iter)?;
+                    let factor = parse_factor(tokens_iter)?;
 
-                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(term_1));
+                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(factor));
                 }
                 BinaryOperator::Minus => {
                     tokens_iter.next();
-                    let term_1 = parse_factor(tokens_iter)?;
+                    let factor = parse_factor(tokens_iter)?;
 
-                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(term_1));
+                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(factor));
                 }
                 _ => {
                     break;
@@ -288,43 +288,31 @@ fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syn
             match binary_operator {
                 BinaryOperator::Greater => {
                     tokens_iter.next();
-                    let comparison_1 = parse_term(tokens_iter)?;
+                    let term = parse_term(tokens_iter)?;
 
-                    comparison = Expr::Binary(
-                        binary_operator,
-                        Box::new(comparison),
-                        Box::new(comparison_1),
-                    );
+                    comparison =
+                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::GreaterEqual => {
                     tokens_iter.next();
-                    let comparison_1 = parse_term(tokens_iter)?;
+                    let term = parse_term(tokens_iter)?;
 
-                    comparison = Expr::Binary(
-                        binary_operator,
-                        Box::new(comparison),
-                        Box::new(comparison_1),
-                    );
+                    comparison =
+                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::Less => {
                     tokens_iter.next();
-                    let comparison_1 = parse_term(tokens_iter)?;
+                    let term = parse_term(tokens_iter)?;
 
-                    comparison = Expr::Binary(
-                        binary_operator,
-                        Box::new(comparison),
-                        Box::new(comparison_1),
-                    );
+                    comparison =
+                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::LessEqual => {
                     tokens_iter.next();
-                    let comparison_1 = parse_term(tokens_iter)?;
+                    let term = parse_term(tokens_iter)?;
 
-                    comparison = Expr::Binary(
-                        binary_operator,
-                        Box::new(comparison),
-                        Box::new(comparison_1),
-                    );
+                    comparison =
+                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
                 }
                 _ => {
                     break;
@@ -346,17 +334,17 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Synta
             match binary_operator {
                 BinaryOperator::BangEqual => {
                     tokens_iter.next();
-                    let equality_1 = parse_comparison(tokens_iter)?;
+                    let comparison = parse_comparison(tokens_iter)?;
 
                     equality =
-                        Expr::Binary(binary_operator, Box::new(equality), Box::new(equality_1));
+                        Expr::Binary(binary_operator, Box::new(equality), Box::new(comparison));
                 }
                 BinaryOperator::EqualEqual => {
                     tokens_iter.next();
-                    let equality_1 = parse_comparison(tokens_iter)?;
+                    let comparison = parse_comparison(tokens_iter)?;
 
                     equality =
-                        Expr::Binary(binary_operator, Box::new(equality), Box::new(equality_1));
+                        Expr::Binary(binary_operator, Box::new(equality), Box::new(comparison));
                 }
                 _ => {
                     break;
@@ -371,26 +359,22 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Synta
 }
 
 fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let expression = parse_equality(tokens_iter)?;
+    let equality = parse_equality(tokens_iter)?;
 
-    Ok(expression)
+    Ok(equality)
 }
 
 fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let mut expression = parse_expression(tokens_iter)?;
+    let mut comma = parse_expression(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Comma => {
                     tokens_iter.next();
-                    let expression_1 = parse_expression(tokens_iter)?;
+                    let expression = parse_expression(tokens_iter)?;
 
-                    expression = Expr::Binary(
-                        binary_operator,
-                        Box::new(expression),
-                        Box::new(expression_1),
-                    );
+                    comma = Expr::Binary(binary_operator, Box::new(comma), Box::new(expression));
                 }
                 _ => {
                     break;
@@ -401,7 +385,7 @@ fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
         }
     }
 
-    Ok(expression)
+    Ok(comma)
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
