@@ -180,15 +180,16 @@ fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syntax
             TokenKind::LeftParen => {
                 let expression = parse_expression(tokens_iter)?;
 
-                let next_token = tokens_iter.next().unwrap();
+                let err =
+                    SyntaxError::new(String::from("Expected a closing parenthese"), token.line);
 
-                if next_token.kind == TokenKind::RightParen {
-                    Ok(expression)
+                if let Some(token) = tokens_iter.next() {
+                    match token.kind {
+                        TokenKind::RightParen => Ok(expression),
+                        _ => Err(err),
+                    }
                 } else {
-                    Err(SyntaxError::new(
-                        String::from("Expected a closing parenthese"),
-                        next_token.line,
-                    ))
+                    Err(err)
                 }
             }
             _ => Err(SyntaxError::new(
@@ -563,6 +564,55 @@ mod tests {
 
     #[test]
     fn throws_meaningful_errors() {
-        //TODO use SyntaxError
+        // + 3
+        let tokens = vec![
+            Token::new(TokenKind::Plus, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+        ];
+
+        assert_eq!(
+            parse(&tokens),
+            Err(SyntaxError::new(String::from("Expected an expression"), 1))
+        );
+
+        // (3 + 2
+        let tokens = vec![
+            Token::new(TokenKind::LeftParen, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Plus, 1),
+            Token::new(TokenKind::Number(2.0), 1),
+        ];
+
+        assert_eq!(
+            parse(&tokens),
+            Err(SyntaxError::new(
+                String::from("Expected a closing parenthese"),
+                1
+            ))
+        );
+
+        // 4 - ()
+        let tokens = vec![
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Minus, 1),
+            Token::new(TokenKind::LeftParen, 1),
+            Token::new(TokenKind::RightParen, 1),
+        ];
+        assert_eq!(
+            parse(&tokens),
+            Err(SyntaxError::new(String::from("Expected an expression"), 1))
+        );
+
+        // .3 - 2
+        let tokens = vec![
+            Token::new(TokenKind::Dot, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Minus, 1),
+            Token::new(TokenKind::Number(2.0), 1),
+        ];
+        assert_eq!(
+            parse(&tokens),
+            Err(SyntaxError::new(String::from("Expected an expression"), 1))
+        );
     }
 }
