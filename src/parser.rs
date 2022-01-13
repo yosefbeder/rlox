@@ -5,12 +5,10 @@ use std::convert::TryFrom;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-// comma -> expression "," expression "," expression
-
 /*
     GRAMMAR
-        comma -> expression ("," expression)*
-        expression -> equality
+        expression -> comma
+        comma -> equality ("," equality)*
         equality -> comparison (("==" | "!=") comparison)*
         comparison -> term ((">" | ">=" | "<" | "<=") term)*
         term -> factor (("+" | "-") factor)*
@@ -358,23 +356,17 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Synta
     Ok(equality)
 }
 
-fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let equality = parse_equality(tokens_iter)?;
-
-    Ok(equality)
-}
-
 fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let mut comma = parse_expression(tokens_iter)?;
+    let mut comma = parse_equality(tokens_iter)?;
 
     while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Comma => {
                     tokens_iter.next();
-                    let expression = parse_expression(tokens_iter)?;
+                    let equality = parse_equality(tokens_iter)?;
 
-                    comma = Expr::Binary(binary_operator, Box::new(comma), Box::new(expression));
+                    comma = Expr::Binary(binary_operator, Box::new(comma), Box::new(equality));
                 }
                 _ => {
                     break;
@@ -388,10 +380,16 @@ fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
     Ok(comma)
 }
 
+fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+    let comma = parse_comma(tokens_iter)?;
+
+    Ok(comma)
+}
+
 pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
     let mut tokens_iter = tokens.iter().peekable();
-    let comma = parse_comma(&mut tokens_iter)?;
-    Ok(comma)
+    let expression = parse_expression(&mut tokens_iter)?;
+    Ok(expression)
 }
 
 #[cfg(test)]
