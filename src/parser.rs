@@ -2,6 +2,7 @@ use super::scanner::Token;
 use super::scanner::TokenKind;
 use super::SyntaxError;
 use std::convert::TryFrom;
+use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::slice::Iter;
 
@@ -168,10 +169,18 @@ impl Expr {
             }
         }
     }
+
+    fn get_line(&self) -> usize {
+        match self {
+            Self::Literal(line, _literal) => *line,
+            Self::Binary(line, _operator, _expr_1, _expr_2) => *line,
+            Self::Unary(line, _operator, _expr) => *line,
+        }
+    }
 }
 
-fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let token = tokens_iter.next().unwrap();
+fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+    let (_, token) = tokens_iter.next().unwrap();
 
     if let Ok(literal) = Literal::try_from(token.kind.clone()) {
         Ok(Expr::Literal(token.line, literal))
@@ -179,11 +188,12 @@ fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syntax
         match token.kind {
             TokenKind::LeftParen => {
                 let expression = parse_expression(tokens_iter)?;
+                let err = SyntaxError::new(
+                    String::from("Expected a closing parenthese"),
+                    expression.get_line(),
+                );
 
-                let err =
-                    SyntaxError::new(String::from("Expected a closing parenthese"), token.line);
-
-                if let Some(token) = tokens_iter.next() {
+                if let Some((_, token)) = tokens_iter.next() {
                     match token.kind {
                         TokenKind::RightParen => Ok(expression),
                         _ => Err(err),
@@ -200,8 +210,8 @@ fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syntax
     }
 }
 
-fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
-    let token = tokens_iter.peek().unwrap();
+fn parse_unary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+    let (_, token) = tokens_iter.peek().unwrap();
 
     if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
         let line = token.line;
@@ -216,10 +226,10 @@ fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
     }
 }
 
-fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_factor(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let mut factor = parse_unary(tokens_iter)?;
 
-    while let Some(token) = tokens_iter.peek() {
+    while let Some((_, token)) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Star => {
@@ -248,10 +258,10 @@ fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxE
     Ok(factor)
 }
 
-fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_term(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let mut term = parse_factor(tokens_iter)?;
 
-    while let Some(token) = tokens_iter.peek() {
+    while let Some((_, token)) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Plus => {
@@ -280,10 +290,12 @@ fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxErr
     Ok(term)
 }
 
-fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_comparison(
+    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+) -> Result<Expr, SyntaxError> {
     let mut comparison = parse_term(tokens_iter)?;
 
-    while let Some(token) = tokens_iter.peek() {
+    while let Some((_, token)) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Greater => {
@@ -330,10 +342,10 @@ fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syn
     Ok(comparison)
 }
 
-fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_equality(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let mut equality = parse_comparison(tokens_iter)?;
 
-    while let Some(token) = tokens_iter.peek() {
+    while let Some((_, token)) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::BangEqual => {
@@ -372,10 +384,10 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Synta
     Ok(equality)
 }
 
-fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_comma(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let mut comma = parse_equality(tokens_iter)?;
 
-    while let Some(token) = tokens_iter.peek() {
+    while let Some((_, token)) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Comma => {
@@ -398,14 +410,16 @@ fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
     Ok(comma)
 }
 
-fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_expression(
+    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+) -> Result<Expr, SyntaxError> {
     let comma = parse_comma(tokens_iter)?;
 
     Ok(comma)
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
-    let mut tokens_iter = tokens.iter().peekable();
+    let mut tokens_iter = tokens.iter().enumerate().peekable();
     let expression = parse_expression(&mut tokens_iter)?;
     Ok(expression)
 }
