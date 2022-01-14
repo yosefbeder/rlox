@@ -149,7 +149,6 @@ pub enum Expr {
     Literal(Literal),
     Unary(UnaryOperator, Box<Expr>),
     Binary(BinaryOperator, Box<Expr>, Box<Expr>),
-    Grouping(Box<Expr>),
 }
 
 impl Expr {
@@ -166,9 +165,6 @@ impl Expr {
             }
             Self::Unary(operator, expr) => {
                 format!("({}, {})", operator.to_string(), expr.to_string())
-            }
-            Self::Grouping(expr) => {
-                format!("(group {})", expr.to_string())
             }
         }
     }
@@ -400,11 +396,14 @@ mod tests {
     fn expr_to_string() {
         let expr = Expr::Binary(
             BinaryOperator::LessEqual,
-            Box::new(Expr::Grouping(Box::new(Expr::Binary(
-                BinaryOperator::Minus,
-                Box::new(Expr::Literal(Literal::Number(3.0))),
-                Box::new(Expr::Literal(Literal::Number(2.0))),
-            )))),
+            Box::new(Expr::Binary(
+                BinaryOperator::Plus,
+                Box::new(Expr::Literal(Literal::String(String::from("hi")))),
+                Box::new(Expr::Unary(
+                    UnaryOperator::Minus,
+                    Box::new(Expr::Literal(Literal::Identifier(String::from("x")))),
+                )),
+            )),
             Box::new(Expr::Binary(
                 BinaryOperator::Plus,
                 Box::new(Expr::Literal(Literal::String(String::from("hi")))),
@@ -417,7 +416,7 @@ mod tests {
 
         assert_eq!(
             expr.to_string(),
-            "(<=, (group (-, 3, 2)), (+, \"hi\", (-, x)))"
+            "(<=, (+, \"hi\", (-, x)), (+, \"hi\", (-, x)))"
         );
     }
 
