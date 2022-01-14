@@ -1,4 +1,4 @@
-use super::SyntaxError;
+use super::errors::SyntaxError;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]

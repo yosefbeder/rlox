@@ -1,6 +1,7 @@
+use super::errors::RuntimeError;
+use super::errors::SyntaxError;
 use super::scanner::Token;
 use super::scanner::TokenKind;
-use super::SyntaxError;
 use std::convert::TryFrom;
 use std::iter::Enumerate;
 use std::iter::Peekable;
@@ -19,7 +20,7 @@ use std::slice::Iter;
 
 */
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 enum Literal {
     String(String),
     Number(f64),
@@ -38,6 +39,14 @@ impl Literal {
             Self::True => format!("true"),
             Self::False => format!("false"),
             Self::Nil => format!("nil"),
+        }
+    }
+
+    fn is_truthy(&self) -> bool {
+        match self {
+            Self::False => false,
+            Self::Nil => false,
+            _ => true,
         }
     }
 }
@@ -175,6 +184,33 @@ impl Expr {
             Self::Literal(line, _literal) => *line,
             Self::Binary(line, _operator, _expr_1, _expr_2) => *line,
             Self::Unary(line, _operator, _expr) => *line,
+        }
+    }
+
+    fn eval(&self) -> Result<Literal, RuntimeError> {
+        match self {
+            Self::Literal(_line, literal) => Ok(literal.clone()),
+            Self::Unary(line, operator, expr) => {
+                let right = expr.eval()?;
+
+                match operator {
+                    UnaryOperator::Bang => {
+                        if right.is_truthy() {
+                            Ok(Literal::False)
+                        } else {
+                            Ok(Literal::True)
+                        }
+                    }
+                    UnaryOperator::Minus => match right {
+                        Literal::Number(value) => Ok(Literal::Number(value * -1.0)),
+                        _ => Err(RuntimeError::new(
+                            String::from("The negative operator works only with numbers"),
+                            *line,
+                        )),
+                    },
+                }
+            }
+            _ => Ok(Literal::Nil),
         }
     }
 }
@@ -719,6 +755,100 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
+        );
+    }
+
+    #[test]
+    fn unary_expressions_eval() {
+        // -4
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Minus,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+            )
+            .eval(),
+            Ok(Literal::Number(-4.0))
+        );
+
+        // -"yosef"
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Minus,
+                Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
+            )
+            .eval(),
+            Err(RuntimeError::new(
+                String::from("The negative operator works only with numbers"),
+                1
+            ))
+        );
+
+        //ignore !true
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::True))
+            )
+            .eval(),
+            Ok(Literal::False)
+        );
+
+        //ignore !nil
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::Nil))
+            )
+            .eval(),
+            Ok(Literal::True)
+        );
+
+        //ignore !nil
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::Nil))
+            )
+            .eval(),
+            Ok(Literal::True)
+        );
+
+        //ignore !"nil"
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::String(String::from("nil"))))
+            )
+            .eval(),
+            Ok(Literal::False)
+        );
+
+        //ignore !""
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::String(String::from(""))))
+            )
+            .eval(),
+            Ok(Literal::False)
+        );
+
+        //ignore !0
+        assert_eq!(
+            Expr::Unary(
+                1,
+                UnaryOperator::Bang,
+                Box::new(Expr::Literal(1, Literal::Number(0.0)))
+            )
+            .eval(),
+            Ok(Literal::False)
         );
     }
 }
