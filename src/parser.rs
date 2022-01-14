@@ -146,16 +146,16 @@ impl TryFrom<TokenKind> for BinaryOperator {
 
 #[derive(PartialEq, Debug)]
 pub enum Expr {
-    Literal(Literal),
-    Unary(UnaryOperator, Box<Expr>),
-    Binary(BinaryOperator, Box<Expr>, Box<Expr>),
+    Literal(usize, Literal),
+    Unary(usize, UnaryOperator, Box<Expr>),
+    Binary(usize, BinaryOperator, Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
     fn to_string(&self) -> String {
         match self {
-            Self::Literal(literal) => literal.to_string(),
-            Self::Binary(operator, expr_1, expr_2) => {
+            Self::Literal(_line, literal) => literal.to_string(),
+            Self::Binary(_line, operator, expr_1, expr_2) => {
                 format!(
                     "({}, {}, {})",
                     operator.to_string(),
@@ -163,7 +163,7 @@ impl Expr {
                     expr_2.to_string(),
                 )
             }
-            Self::Unary(operator, expr) => {
+            Self::Unary(_line, operator, expr) => {
                 format!("({}, {})", operator.to_string(), expr.to_string())
             }
         }
@@ -174,7 +174,7 @@ fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syntax
     let token = tokens_iter.next().unwrap();
 
     if let Ok(literal) = Literal::try_from(token.kind.clone()) {
-        Ok(Expr::Literal(literal))
+        Ok(Expr::Literal(token.line, literal))
     } else {
         match token.kind {
             TokenKind::LeftParen => {
@@ -204,8 +204,10 @@ fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
     let token = tokens_iter.peek().unwrap();
 
     if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
+        let line = token.line;
         tokens_iter.next();
         Ok(Expr::Unary(
+            line,
             unary_operator,
             Box::new(parse_unary(tokens_iter)?),
         ))
@@ -221,16 +223,18 @@ fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxE
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Star => {
+                    let line = token.line;
                     tokens_iter.next();
                     let unary = parse_unary(tokens_iter)?;
 
-                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(unary));
+                    factor = Expr::Binary(line, binary_operator, Box::new(factor), Box::new(unary));
                 }
                 BinaryOperator::Slash => {
+                    let line = token.line;
                     tokens_iter.next();
                     let unary = parse_unary(tokens_iter)?;
 
-                    factor = Expr::Binary(binary_operator, Box::new(factor), Box::new(unary));
+                    factor = Expr::Binary(line, binary_operator, Box::new(factor), Box::new(unary));
                 }
                 _ => {
                     break;
@@ -251,16 +255,18 @@ fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxErr
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Plus => {
+                    let line = token.line;
                     tokens_iter.next();
                     let factor = parse_factor(tokens_iter)?;
 
-                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(factor));
+                    term = Expr::Binary(line, binary_operator, Box::new(term), Box::new(factor));
                 }
                 BinaryOperator::Minus => {
+                    let line = token.line;
                     tokens_iter.next();
                     let factor = parse_factor(tokens_iter)?;
 
-                    term = Expr::Binary(binary_operator, Box::new(term), Box::new(factor));
+                    term = Expr::Binary(line, binary_operator, Box::new(term), Box::new(factor));
                 }
                 _ => {
                     break;
@@ -281,32 +287,36 @@ fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syn
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Greater => {
+                    let line = token.line;
                     tokens_iter.next();
                     let term = parse_term(tokens_iter)?;
 
                     comparison =
-                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
+                        Expr::Binary(line, binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::GreaterEqual => {
+                    let line = token.line;
                     tokens_iter.next();
                     let term = parse_term(tokens_iter)?;
 
                     comparison =
-                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
+                        Expr::Binary(line, binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::Less => {
+                    let line = token.line;
                     tokens_iter.next();
                     let term = parse_term(tokens_iter)?;
 
                     comparison =
-                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
+                        Expr::Binary(line, binary_operator, Box::new(comparison), Box::new(term));
                 }
                 BinaryOperator::LessEqual => {
+                    let line = token.line;
                     tokens_iter.next();
                     let term = parse_term(tokens_iter)?;
 
                     comparison =
-                        Expr::Binary(binary_operator, Box::new(comparison), Box::new(term));
+                        Expr::Binary(line, binary_operator, Box::new(comparison), Box::new(term));
                 }
                 _ => {
                     break;
@@ -327,18 +337,28 @@ fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Synta
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::BangEqual => {
+                    let line = token.line;
                     tokens_iter.next();
                     let comparison = parse_comparison(tokens_iter)?;
 
-                    equality =
-                        Expr::Binary(binary_operator, Box::new(equality), Box::new(comparison));
+                    equality = Expr::Binary(
+                        line,
+                        binary_operator,
+                        Box::new(equality),
+                        Box::new(comparison),
+                    );
                 }
                 BinaryOperator::EqualEqual => {
+                    let line = token.line;
                     tokens_iter.next();
                     let comparison = parse_comparison(tokens_iter)?;
 
-                    equality =
-                        Expr::Binary(binary_operator, Box::new(equality), Box::new(comparison));
+                    equality = Expr::Binary(
+                        line,
+                        binary_operator,
+                        Box::new(equality),
+                        Box::new(comparison),
+                    );
                 }
                 _ => {
                     break;
@@ -359,10 +379,12 @@ fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Comma => {
+                    let line = token.line;
                     tokens_iter.next();
                     let equality = parse_equality(tokens_iter)?;
 
-                    comma = Expr::Binary(binary_operator, Box::new(comma), Box::new(equality));
+                    comma =
+                        Expr::Binary(line, binary_operator, Box::new(comma), Box::new(equality));
                 }
                 _ => {
                     break;
@@ -395,21 +417,26 @@ mod tests {
     #[test]
     fn expr_to_string() {
         let expr = Expr::Binary(
+            1,
             BinaryOperator::LessEqual,
             Box::new(Expr::Binary(
+                1,
                 BinaryOperator::Plus,
-                Box::new(Expr::Literal(Literal::String(String::from("hi")))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("hi")))),
                 Box::new(Expr::Unary(
+                    1,
                     UnaryOperator::Minus,
-                    Box::new(Expr::Literal(Literal::Identifier(String::from("x")))),
+                    Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
                 )),
             )),
             Box::new(Expr::Binary(
+                1,
                 BinaryOperator::Plus,
-                Box::new(Expr::Literal(Literal::String(String::from("hi")))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("hi")))),
                 Box::new(Expr::Unary(
+                    1,
                     UnaryOperator::Minus,
-                    Box::new(Expr::Literal(Literal::Identifier(String::from("x")))),
+                    Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
                 )),
             )),
         );
@@ -425,7 +452,7 @@ mod tests {
         // 4
         let tokens = vec![Token::new(TokenKind::Number(4.0), 1)];
 
-        assert_eq!(parse(&tokens), Ok(Expr::Literal(Literal::Number(4.0))));
+        assert_eq!(parse(&tokens), Ok(Expr::Literal(1, Literal::Number(4.0))));
 
         // - 4
         let tokens = vec![
@@ -436,8 +463,9 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Unary(
+                1,
                 UnaryOperator::Minus,
-                Box::new(Expr::Literal(Literal::Number(4.0)))
+                Box::new(Expr::Literal(1, Literal::Number(4.0)))
             ))
         );
 
@@ -451,10 +479,12 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Unary(
+                1,
                 UnaryOperator::Bang,
                 Box::new(Expr::Unary(
+                    1,
                     UnaryOperator::Bang,
-                    Box::new(Expr::Literal(Literal::True))
+                    Box::new(Expr::Literal(1, Literal::True))
                 ))
             ))
         );
@@ -469,9 +499,10 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Star,
-                Box::new(Expr::Literal(Literal::Number(4.0))),
-                Box::new(Expr::Literal(Literal::Number(3.0))),
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
             ))
         );
 
@@ -485,9 +516,10 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Plus,
-                Box::new(Expr::Literal(Literal::Number(4.0))),
-                Box::new(Expr::Literal(Literal::Number(3.0))),
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
             ))
         );
 
@@ -501,9 +533,10 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Greater,
-                Box::new(Expr::Literal(Literal::Number(4.0))),
-                Box::new(Expr::Literal(Literal::Number(3.0))),
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
             ))
         );
 
@@ -517,9 +550,10 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::EqualEqual,
-                Box::new(Expr::Literal(Literal::Number(4.0))),
-                Box::new(Expr::Literal(Literal::Number(3.0))),
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
             ))
         );
 
@@ -538,9 +572,10 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Star,
-                Box::new(Expr::Literal(Literal::Number(4.0))),
-                Box::new(Expr::Literal(Literal::Number(3.0)))
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0)))
             ))
         );
 
@@ -558,16 +593,19 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Comma,
                 Box::new(Expr::Binary(
+                    1,
                     BinaryOperator::Comma,
-                    Box::new(Expr::Literal(Literal::Number(4.0))),
-                    Box::new(Expr::Literal(Literal::Number(3.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(3.0))),
                 )),
                 Box::new(Expr::Binary(
+                    1,
                     BinaryOperator::EqualEqual,
-                    Box::new(Expr::Literal(Literal::Number(4.0))),
-                    Box::new(Expr::Literal(Literal::Number(3.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(3.0))),
                 ))
             ))
         );
@@ -589,24 +627,29 @@ mod tests {
         assert_eq!(
             parse(&tokens),
             Ok(Expr::Binary(
+                1,
                 BinaryOperator::Comma,
                 Box::new(Expr::Binary(
+                    1,
                     BinaryOperator::Greater,
                     Box::new(Expr::Binary(
+                        1,
                         BinaryOperator::Minus,
                         Box::new(Expr::Binary(
+                            1,
                             BinaryOperator::Star,
-                            Box::new(Expr::Literal(Literal::Number(4.0))),
-                            Box::new(Expr::Literal(Literal::Number(3.0))),
+                            Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                            Box::new(Expr::Literal(1, Literal::Number(3.0))),
                         )),
-                        Box::new(Expr::Literal(Literal::Number(2.0))),
+                        Box::new(Expr::Literal(1, Literal::Number(2.0))),
                     )),
                     Box::new(Expr::Unary(
+                        1,
                         UnaryOperator::Minus,
-                        Box::new(Expr::Literal(Literal::Number(13.0)))
+                        Box::new(Expr::Literal(1, Literal::Number(13.0)))
                     ))
                 )),
-                Box::new(Expr::Literal(Literal::False))
+                Box::new(Expr::Literal(1, Literal::False))
             )),
         );
     }
