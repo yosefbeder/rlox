@@ -210,7 +210,129 @@ impl Expr {
                     },
                 }
             }
-            _ => Ok(Literal::Nil),
+            Self::Binary(line, operator, expr_1, expr_2) => {
+                let left = expr_1.eval()?;
+                let right = expr_2.eval()?;
+
+                match operator {
+                    BinaryOperator::Plus => match (left, right) {
+                        (Literal::String(left), Literal::String(right)) => {
+                            Ok(Literal::String(format!("{}{}", left, right)))
+                        }
+                        (Literal::Number(left), Literal::Number(right)) => {
+                            Ok(Literal::Number(left + right))
+                        }
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be either strings or numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::Minus => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => {
+                            Ok(Literal::Number(left - right))
+                        }
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::Star => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => {
+                            Ok(Literal::Number(left * right))
+                        }
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::Slash => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => {
+                            Ok(Literal::Number(left / right))
+                        }
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::BangEqual => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left != right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        (Literal::String(left), Literal::String(right)) => Ok(if left != right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        (Literal::Nil, Literal::Nil) => Ok(Literal::False),
+                        (Literal::False, Literal::False) => Ok(Literal::False),
+                        (Literal::True, Literal::True) => Ok(Literal::False),
+                        _ => Ok(Literal::True),
+                    },
+                    BinaryOperator::EqualEqual => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left == right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        (Literal::String(left), Literal::String(right)) => Ok(if left == right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        (Literal::Nil, Literal::Nil) => Ok(Literal::True),
+                        (Literal::False, Literal::False) => Ok(Literal::True),
+                        (Literal::True, Literal::True) => Ok(Literal::True),
+                        _ => Ok(Literal::False),
+                    },
+                    BinaryOperator::Greater => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left > right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::GreaterEqual => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left >= right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::Less => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left < right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::LessEqual => match (left, right) {
+                        (Literal::Number(left), Literal::Number(right)) => Ok(if left <= right {
+                            Literal::True
+                        } else {
+                            Literal::False
+                        }),
+                        _ => Err(RuntimeError::new(
+                            String::from("Both operands should be numbers"),
+                            *line,
+                        )),
+                    },
+                    BinaryOperator::Comma => Ok(right),
+                }
+            }
         }
     }
 }
@@ -849,6 +971,244 @@ mod tests {
             )
             .eval(),
             Ok(Literal::False)
+        );
+    }
+
+    /*
+      enum BinaryOperator {
+        Plus,
+        Minus,
+        Star,
+        Slash,
+        BangEqual,
+        EqualEqual,
+        Greater,
+        GreaterEqual,
+        Less,
+        LessEqual,
+        Comma,
+    }
+    */
+
+    #[test]
+    fn binary_expressions_eval() {
+        // 4 + 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Plus,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::Number(7.0)),
+        );
+
+        // "yosef" + "mostafa"
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Plus,
+                Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("mostafa")))),
+            )
+            .eval(),
+            Ok(Literal::String(String::from("yosefmostafa"))),
+        );
+
+        // "yosef" + 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Plus,
+                Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0)))
+            )
+            .eval(),
+            Err(RuntimeError::new(
+                String::from("Both operands should be either strings or numbers"),
+                1
+            ))
+        );
+
+        // 4 - 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Minus,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::Number(1.0)),
+        );
+
+        // 4 * 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Star,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::Number(12.0)),
+        );
+
+        // 4 * "yosef"
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Star,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
+            )
+            .eval(),
+            Err(RuntimeError::new(
+                String::from("Both operands should be numbers"),
+                1
+            )),
+        );
+
+        // 4 / 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Slash,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            // 😃
+            Ok(Literal::Number(4.0 / 3.0)),
+        );
+
+        // 4 != 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::BangEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::True),
+        );
+
+        // 4 == "4"
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::EqualEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("4")))),
+            )
+            .eval(),
+            Ok(Literal::False)
+        );
+
+        // 4 == 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::EqualEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::False),
+        );
+
+        // 4 > 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Greater,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::True),
+        );
+
+        // 4 >= 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::GreaterEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::True),
+        );
+
+        // 4 < 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Less,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::False),
+        );
+
+        // 4 <= 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::LessEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::False),
+        );
+
+        // 4 <= "3"
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::LessEqual,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::String(String::from("3")))),
+            )
+            .eval(),
+            Err(RuntimeError::new(
+                String::from("Both operands should be numbers"),
+                1
+            )),
+        );
+
+        // 4, 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Comma,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )
+            .eval(),
+            Ok(Literal::Number(3.0)),
+        );
+
+        // 4, 3 == 3
+        assert_eq!(
+            Expr::Binary(
+                1,
+                BinaryOperator::Comma,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Binary(
+                    1,
+                    BinaryOperator::EqualEqual,
+                    Box::new(Expr::Literal(1, Literal::Number(3.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(3.0))),
+                )),
+            )
+            .eval(),
+            Ok(Literal::True),
         );
     }
 }
