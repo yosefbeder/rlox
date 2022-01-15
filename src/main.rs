@@ -26,7 +26,10 @@ fn run(code: &str) {
         Ok(tokens) => match parser::parse(&tokens) {
             Ok(statements) => {
                 for statement in statements {
-                    statement.interpret();
+                    match statement.interpret() {
+                        Ok(_) => (),
+                        Err(err) => println!("{}", err),
+                    };
                 }
             }
             Err(err) => println!("{}", err),

@@ -76,15 +76,6 @@ pub enum UnaryOperator {
     Bang,
 }
 
-impl UnaryOperator {
-    fn to_string(&self) -> &'static str {
-        match self {
-            Self::Minus => "-",
-            Self::Bang => "!",
-        }
-    }
-}
-
 impl TryFrom<TokenKind> for UnaryOperator {
     type Error = String;
 
@@ -113,24 +104,6 @@ pub enum BinaryOperator {
     Less,
     LessEqual,
     Comma,
-}
-
-impl BinaryOperator {
-    fn to_string(&self) -> &'static str {
-        match self {
-            Self::Plus => "+",
-            Self::Minus => "-",
-            Self::Star => "*",
-            Self::Slash => "/",
-            Self::BangEqual => "!=",
-            Self::EqualEqual => "==",
-            Self::Greater => ">",
-            Self::GreaterEqual => ">=",
-            Self::Less => "<",
-            Self::LessEqual => "<=",
-            Self::Comma => ",",
-        }
-    }
 }
 
 impl TryFrom<TokenKind> for BinaryOperator {
@@ -165,23 +138,6 @@ pub enum Expr {
 }
 
 impl Expr {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Literal(_line, literal) => literal.to_string(),
-            Self::Binary(_line, operator, expr_1, expr_2) => {
-                format!(
-                    "({}, {}, {})",
-                    operator.to_string(),
-                    expr_1.to_string(),
-                    expr_2.to_string(),
-                )
-            }
-            Self::Unary(_line, operator, expr) => {
-                format!("({}, {})", operator.to_string(), expr.to_string())
-            }
-        }
-    }
-
     fn get_line(&self) -> usize {
         match self {
             Self::Literal(line, _literal) => *line,
@@ -669,39 +625,6 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, SyntaxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn expr_to_string() {
-        let expr = Expr::Binary(
-            1,
-            BinaryOperator::LessEqual,
-            Box::new(Expr::Binary(
-                1,
-                BinaryOperator::Plus,
-                Box::new(Expr::Literal(1, Literal::String(String::from("hi")))),
-                Box::new(Expr::Unary(
-                    1,
-                    UnaryOperator::Minus,
-                    Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
-                )),
-            )),
-            Box::new(Expr::Binary(
-                1,
-                BinaryOperator::Plus,
-                Box::new(Expr::Literal(1, Literal::String(String::from("hi")))),
-                Box::new(Expr::Unary(
-                    1,
-                    UnaryOperator::Minus,
-                    Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
-                )),
-            )),
-        );
-
-        assert_eq!(
-            expr.to_string(),
-            "(<=, (+, \"hi\", (-, x)), (+, \"hi\", (-, x)))"
-        );
-    }
 
     #[test]
     fn parses_expressions_correct_precendence() {
