@@ -32,8 +32,8 @@ fn run(code: &str) {
                     };
                 }
             }
-            Err(errors) => {
-                for err in errors {
+            Err(errs) => {
+                for err in errs {
                     println!("{}", err)
                 }
             }

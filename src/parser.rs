@@ -632,14 +632,14 @@ fn synchronize(tokens_iter: &mut Peekable<Iter<Token>>) {
 pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
     let mut tokens_iter = tokens.iter().peekable();
     let mut statements = vec![];
-    let mut errors = vec![];
+    let mut errs = vec![];
 
     while let Some(token) = tokens_iter.peek() {
         if token.kind != TokenKind::End {
             match parse_statement(&mut tokens_iter) {
                 Ok(statement) => statements.push(statement),
                 Err(err) => {
-                    errors.push(err);
+                    errs.push(err);
                     synchronize(&mut tokens_iter);
                 }
             }
@@ -648,10 +648,30 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
         }
     }
 
-    if errors.len() > 1 {
-        Err(errors)
+    if errs.len() > 1 {
+        Err(errs)
     } else {
-        Ok(statements)
+        let err = SyntaxError::new(
+            String::from("Expected the end of the file"),
+            match statements.iter().last() {
+                Some(statement) => match statement {
+                    Statement::Expr(expr) => expr.get_line(),
+                    Statement::Print(expr) => expr.get_line(),
+                },
+                _ => 1,
+            },
+        );
+        if let Some(token) = tokens_iter.next() {
+            if token.kind == TokenKind::End {
+                Ok(statements)
+            } else {
+                errs.push(err);
+                Err(errs)
+            }
+        } else {
+            errs.push(err);
+            Err(errs)
+        }
     }
 }
 
@@ -931,13 +951,13 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
-            Ok(vec![Statement::Expr(Expr::Binary(
+            parse_statement(&mut tokens.iter().peekable()),
+            Ok(Statement::Expr(Expr::Binary(
                 1,
                 BinaryOperator::Star,
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
-            ))])
+            )))
         )
     }
 
