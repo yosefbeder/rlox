@@ -346,6 +346,21 @@ pub enum Statement {
     Expr(Expr),
 }
 
+impl Statement {
+    pub fn interpret(&self) -> Result<(), RuntimeError> {
+        match self {
+            Self::Print(expr) => {
+                println!("{}", expr.eval()?.to_string());
+                Ok(())
+            }
+            Self::Expr(expr) => {
+                expr.eval()?;
+                Ok(())
+            }
+        }
+    }
+}
+
 fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let (_, token) = tokens_iter.next().unwrap();
 

@@ -25,9 +25,9 @@ fn run(code: &str) {
     match scanner::scan(&code) {
         Ok(tokens) => match parser::parse(&tokens) {
             Ok(statements) => {
-                // for statement in statements {
-                //     statement.interpret();
-                // }
+                for statement in statements {
+                    statement.interpret();
+                }
             }
             Err(err) => println!("{}", err),
         },
