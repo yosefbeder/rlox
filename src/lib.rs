@@ -1,3 +1,3 @@
 mod errors;
-mod parser;
-mod scanner;
+pub mod parser;
+pub mod scanner;

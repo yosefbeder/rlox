@@ -24,7 +24,7 @@ use std::slice::Iter;
 */
 
 #[derive(PartialEq, Debug, Clone)]
-enum Literal {
+pub enum Literal {
     String(String),
     Number(f64),
     Identifier(String),
@@ -71,7 +71,7 @@ impl TryFrom<TokenKind> for Literal {
 }
 
 #[derive(PartialEq, Debug)]
-enum UnaryOperator {
+pub enum UnaryOperator {
     Minus,
     Bang,
 }
@@ -101,7 +101,7 @@ impl TryFrom<TokenKind> for UnaryOperator {
 }
 
 #[derive(Debug, PartialEq)]
-enum BinaryOperator {
+pub enum BinaryOperator {
     Plus,
     Minus,
     Star,
