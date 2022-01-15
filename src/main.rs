@@ -32,7 +32,11 @@ fn run(code: &str) {
                     };
                 }
             }
-            Err(err) => println!("{}", err),
+            Err(errors) => {
+                for err in errors {
+                    println!("{}", err)
+                }
+            }
         },
         Err(err) => println!("{}", err),
     }

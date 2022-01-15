@@ -1,5 +1,9 @@
-print 3 * (2 + 3);
-4 / 3;
-print 3 / 2;
-print 3 > 2;
-print 2, 3;
+print 3 * (2 + 3); // 15
+4 / 3; // doesn't get printed
+print 3 / 2; // 1.5
+print 3 > 2 // true
+print 2, 3; // 3
+/*
+  This is the coolest thing I've ever made!
+*/
+print 2, 3 // 3

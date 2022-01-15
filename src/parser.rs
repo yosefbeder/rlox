@@ -607,19 +607,79 @@ fn parse_statement(
     }
 }
 
-pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, SyntaxError> {
+/*
+And,
+    Class,
+    Else,
+    False,
+    Fun,
+    For,
+    If,
+    Nil,
+    Or,
+    Print,
+    Return,
+    Super,
+    This,
+    True,
+    Var,
+    While,
+    End,
+*/
+
+fn synchronize(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) {
+    while let Some((_, token)) = tokens_iter.peek() {
+        if token.kind == TokenKind::Semicolon {
+            tokens_iter.next();
+            break;
+        }
+
+        if [
+            TokenKind::Class,
+            TokenKind::Else,
+            TokenKind::Fun,
+            TokenKind::For,
+            TokenKind::If,
+            TokenKind::Print,
+            TokenKind::Return,
+            TokenKind::Super,
+            TokenKind::This,
+            TokenKind::Var,
+            TokenKind::While,
+        ]
+        .contains(&token.kind)
+        {
+            break;
+        }
+
+        tokens_iter.next();
+    }
+}
+
+pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
     let mut tokens_iter = tokens.iter().enumerate().peekable();
     let mut statements = vec![];
+    let mut errors = vec![];
 
     while let Some((_, token)) = tokens_iter.peek() {
         if token.kind != TokenKind::End {
-            statements.push(parse_statement(&mut tokens_iter)?);
+            match parse_statement(&mut tokens_iter) {
+                Ok(statement) => statements.push(statement),
+                Err(err) => {
+                    errors.push(err);
+                    synchronize(&mut tokens_iter);
+                }
+            }
         } else {
             break;
         }
     }
 
-    Ok(statements)
+    if errors.len() > 1 {
+        Err(errors)
+    } else {
+        Ok(statements)
+    }
 }
 
 #[cfg(test)]
@@ -842,7 +902,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
 
@@ -855,7 +915,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Err(SyntaxError::new(
                 String::from("Expected a closing parenthese"),
                 1
@@ -870,7 +930,7 @@ mod tests {
             Token::new(TokenKind::RightParen, 1),
         ];
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
 
@@ -882,7 +942,7 @@ mod tests {
             Token::new(TokenKind::Number(2.0), 1),
         ];
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
     }
