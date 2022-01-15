@@ -3,7 +3,6 @@ use super::errors::SyntaxError;
 use super::scanner::Token;
 use super::scanner::TokenKind;
 use std::convert::TryFrom;
-use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::slice::Iter;
 
@@ -317,8 +316,8 @@ impl Statement {
     }
 }
 
-fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
-    let (_, token) = tokens_iter.next().unwrap();
+fn parse_primary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+    let token = tokens_iter.next().unwrap();
 
     if let Ok(literal) = Literal::try_from(token.kind.clone()) {
         Ok(Expr::Literal(token.line, literal))
@@ -331,7 +330,7 @@ fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<E
                     expression.get_line(),
                 );
 
-                if let Some((_, token)) = tokens_iter.next() {
+                if let Some(token) = tokens_iter.next() {
                     match token.kind {
                         TokenKind::RightParen => Ok(expression),
                         _ => Err(err),
@@ -348,8 +347,8 @@ fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<E
     }
 }
 
-fn parse_unary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
-    let (_, token) = tokens_iter.peek().unwrap();
+fn parse_unary(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+    let token = tokens_iter.peek().unwrap();
 
     if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
         let line = token.line;
@@ -364,10 +363,10 @@ fn parse_unary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Exp
     }
 }
 
-fn parse_factor(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+fn parse_factor(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut factor = parse_unary(tokens_iter)?;
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Star => {
@@ -396,10 +395,10 @@ fn parse_factor(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Ex
     Ok(factor)
 }
 
-fn parse_term(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+fn parse_term(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut term = parse_factor(tokens_iter)?;
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Plus => {
@@ -428,12 +427,10 @@ fn parse_term(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr
     Ok(term)
 }
 
-fn parse_comparison(
-    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
-) -> Result<Expr, SyntaxError> {
+fn parse_comparison(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut comparison = parse_term(tokens_iter)?;
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Greater => {
@@ -480,10 +477,10 @@ fn parse_comparison(
     Ok(comparison)
 }
 
-fn parse_equality(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+fn parse_equality(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut equality = parse_comparison(tokens_iter)?;
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::BangEqual => {
@@ -522,10 +519,10 @@ fn parse_equality(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<
     Ok(equality)
 }
 
-fn parse_comma(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
+fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let mut comma = parse_equality(tokens_iter)?;
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
             match binary_operator {
                 BinaryOperator::Comma => {
@@ -548,16 +545,14 @@ fn parse_comma(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Exp
     Ok(comma)
 }
 
-fn parse_expression(
-    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
-) -> Result<Expr, SyntaxError> {
+fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let comma = parse_comma(tokens_iter)?;
 
     Ok(comma)
 }
 
 fn parse_print_statement(
-    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+    tokens_iter: &mut Peekable<Iter<Token>>,
 ) -> Result<Statement, SyntaxError> {
     tokens_iter.next();
     let expression = parse_expression(tokens_iter)?;
@@ -565,7 +560,7 @@ fn parse_print_statement(
         String::from("Expected ';' at the end of the statement"),
         expression.get_line(),
     );
-    if let Some((_, token)) = tokens_iter.next() {
+    if let Some(token) = tokens_iter.next() {
         if token.kind == TokenKind::Semicolon {
             Ok(Statement::Print(expression))
         } else {
@@ -577,14 +572,14 @@ fn parse_print_statement(
 }
 
 fn parse_expression_statement(
-    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+    tokens_iter: &mut Peekable<Iter<Token>>,
 ) -> Result<Statement, SyntaxError> {
     let expression = parse_expression(tokens_iter)?;
     let err = SyntaxError::new(
         String::from("Expected ';' at the end of the statement"),
         expression.get_line(),
     );
-    if let Some((_, token)) = tokens_iter.next() {
+    if let Some(token) = tokens_iter.next() {
         if token.kind == TokenKind::Semicolon {
             Ok(Statement::Expr(expression))
         } else {
@@ -595,10 +590,8 @@ fn parse_expression_statement(
     }
 }
 
-fn parse_statement(
-    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
-) -> Result<Statement, SyntaxError> {
-    let (_, token) = tokens_iter.peek().unwrap();
+fn parse_statement(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Statement, SyntaxError> {
+    let token = tokens_iter.peek().unwrap();
 
     if token.kind == TokenKind::Print {
         Ok(parse_print_statement(tokens_iter)?)
@@ -607,28 +600,8 @@ fn parse_statement(
     }
 }
 
-/*
-And,
-    Class,
-    Else,
-    False,
-    Fun,
-    For,
-    If,
-    Nil,
-    Or,
-    Print,
-    Return,
-    Super,
-    This,
-    True,
-    Var,
-    While,
-    End,
-*/
-
-fn synchronize(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) {
-    while let Some((_, token)) = tokens_iter.peek() {
+fn synchronize(tokens_iter: &mut Peekable<Iter<Token>>) {
+    while let Some(token) = tokens_iter.peek() {
         if token.kind == TokenKind::Semicolon {
             tokens_iter.next();
             break;
@@ -657,11 +630,11 @@ fn synchronize(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) {
 }
 
 pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
-    let mut tokens_iter = tokens.iter().enumerate().peekable();
+    let mut tokens_iter = tokens.iter().peekable();
     let mut statements = vec![];
     let mut errors = vec![];
 
-    while let Some((_, token)) = tokens_iter.peek() {
+    while let Some(token) = tokens_iter.peek() {
         if token.kind != TokenKind::End {
             match parse_statement(&mut tokens_iter) {
                 Ok(statement) => statements.push(statement),
@@ -692,7 +665,7 @@ mod tests {
         let tokens = vec![Token::new(TokenKind::Number(4.0), 1)];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Literal(1, Literal::Number(4.0)))
         );
 
@@ -703,7 +676,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Unary(
                 1,
                 UnaryOperator::Minus,
@@ -719,7 +692,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Unary(
                 1,
                 UnaryOperator::Bang,
@@ -739,7 +712,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Star,
@@ -756,7 +729,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Plus,
@@ -773,7 +746,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Greater,
@@ -790,7 +763,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::EqualEqual,
@@ -812,7 +785,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Star,
@@ -833,7 +806,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Comma,
@@ -867,7 +840,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Comma,
@@ -902,7 +875,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
 
@@ -915,7 +888,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Err(SyntaxError::new(
                 String::from("Expected a closing parenthese"),
                 1
@@ -930,7 +903,7 @@ mod tests {
             Token::new(TokenKind::RightParen, 1),
         ];
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
 
@@ -942,7 +915,7 @@ mod tests {
             Token::new(TokenKind::Number(2.0), 1),
         ];
         assert_eq!(
-            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            parse_expression(&mut tokens.iter().peekable()),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
     }
