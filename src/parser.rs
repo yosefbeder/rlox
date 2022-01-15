@@ -9,6 +9,10 @@ use std::slice::Iter;
 
 /*
     GRAMMAR
+        program -> statement*
+        statement -> print-statement | expression-statement
+        print-statement -> "print" expression ";"
+        expression-statement -> expression ";"
         expression -> comma
         comma -> equality ("," equality)*
         equality -> comparison (("==" | "!=") comparison)*
@@ -17,7 +21,6 @@ use std::slice::Iter;
         factor -> unary (("*" | "/") unary)*
         unary -> ("-" | "!") unary | primary
         primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | "(" expression ")"
-
 */
 
 #[derive(PartialEq, Debug, Clone)]
@@ -337,6 +340,12 @@ impl Expr {
     }
 }
 
+#[derive(PartialEq, Debug)]
+pub enum Statement {
+    Print(Expr),
+    Expr(Expr),
+}
+
 fn parse_primary(tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>) -> Result<Expr, SyntaxError> {
     let (_, token) = tokens_iter.next().unwrap();
 
@@ -576,10 +585,70 @@ fn parse_expression(
     Ok(comma)
 }
 
-pub fn parse(tokens: &[Token]) -> Result<Expr, SyntaxError> {
+fn parse_print_statement(
+    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+) -> Result<Statement, SyntaxError> {
+    tokens_iter.next();
+    let expression = parse_expression(tokens_iter)?;
+    let err = SyntaxError::new(
+        String::from("Expected ';' at the end of the statement"),
+        expression.get_line(),
+    );
+    if let Some((_, token)) = tokens_iter.next() {
+        if token.kind == TokenKind::Semicolon {
+            Ok(Statement::Print(expression))
+        } else {
+            Err(err)
+        }
+    } else {
+        Err(err)
+    }
+}
+
+fn parse_expression_statement(
+    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+) -> Result<Statement, SyntaxError> {
+    let expression = parse_expression(tokens_iter)?;
+    let err = SyntaxError::new(
+        String::from("Expected ';' at the end of the statement"),
+        expression.get_line(),
+    );
+    if let Some((_, token)) = tokens_iter.next() {
+        if token.kind == TokenKind::Semicolon {
+            Ok(Statement::Expr(expression))
+        } else {
+            Err(err)
+        }
+    } else {
+        Err(err)
+    }
+}
+
+fn parse_statement(
+    tokens_iter: &mut Peekable<Enumerate<Iter<Token>>>,
+) -> Result<Statement, SyntaxError> {
+    let (_, token) = tokens_iter.peek().unwrap();
+
+    if token.kind == TokenKind::Print {
+        Ok(parse_print_statement(tokens_iter)?)
+    } else {
+        Ok(parse_expression_statement(tokens_iter)?)
+    }
+}
+
+pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, SyntaxError> {
     let mut tokens_iter = tokens.iter().enumerate().peekable();
-    let expression = parse_expression(&mut tokens_iter)?;
-    Ok(expression)
+    let mut statements = vec![];
+
+    while let Some((_, token)) = tokens_iter.peek() {
+        if token.kind != TokenKind::End {
+            statements.push(parse_statement(&mut tokens_iter)?);
+        } else {
+            break;
+        }
+    }
+
+    Ok(statements)
 }
 
 #[cfg(test)]
@@ -620,11 +689,14 @@ mod tests {
     }
 
     #[test]
-    fn parses_with_correct_precendence() {
+    fn parses_expressions_correct_precendence() {
         // 4
         let tokens = vec![Token::new(TokenKind::Number(4.0), 1)];
 
-        assert_eq!(parse(&tokens), Ok(Expr::Literal(1, Literal::Number(4.0))));
+        assert_eq!(
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
+            Ok(Expr::Literal(1, Literal::Number(4.0)))
+        );
 
         // - 4
         let tokens = vec![
@@ -633,7 +705,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Unary(
                 1,
                 UnaryOperator::Minus,
@@ -649,7 +721,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Unary(
                 1,
                 UnaryOperator::Bang,
@@ -669,7 +741,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Star,
@@ -686,7 +758,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Plus,
@@ -703,7 +775,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Greater,
@@ -720,7 +792,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::EqualEqual,
@@ -742,7 +814,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Star,
@@ -763,7 +835,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Comma,
@@ -797,7 +869,7 @@ mod tests {
         ];
 
         assert_eq!(
-            parse(&tokens),
+            parse_expression(&mut tokens.iter().enumerate().peekable()),
             Ok(Expr::Binary(
                 1,
                 BinaryOperator::Comma,
@@ -824,10 +896,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::False))
             )),
         );
-    }
 
-    #[test]
-    fn throws_meaningful_errors() {
         // + 3
         let tokens = vec![
             Token::new(TokenKind::Plus, 1),
@@ -878,6 +947,27 @@ mod tests {
             parse(&tokens),
             Err(SyntaxError::new(String::from("Expected an expression"), 1))
         );
+    }
+
+    #[test]
+    fn parses_statements() {
+        // 4 * 3;
+        let tokens = [
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Semicolon, 1),
+        ];
+
+        assert_eq!(
+            parse(&tokens),
+            Ok(vec![Statement::Expr(Expr::Binary(
+                1,
+                BinaryOperator::Star,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            ))])
+        )
     }
 
     #[test]
@@ -973,22 +1063,6 @@ mod tests {
             Ok(Literal::False)
         );
     }
-
-    /*
-      enum BinaryOperator {
-        Plus,
-        Minus,
-        Star,
-        Slash,
-        BangEqual,
-        EqualEqual,
-        Greater,
-        GreaterEqual,
-        Less,
-        LessEqual,
-        Comma,
-    }
-    */
 
     #[test]
     fn binary_expressions_eval() {
