@@ -1,3 +1,7 @@
 print 3 * 4;
 3/ 3;
 print "yosef" + " " + "mostafa";
+print "yosef" + "2";
+var x = 3;
+var y = 3;
+print x * y;

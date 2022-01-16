@@ -1,5 +1,6 @@
 use rlox::parser;
 use rlox::scanner;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::str;
@@ -25,10 +26,14 @@ fn run(code: &str) {
     match scanner::scan(&code) {
         Ok(tokens) => match parser::parse(&tokens) {
             Ok(statements) => {
+                let mut environment = HashMap::new();
+
                 for statement in statements {
-                    match statement.interpret() {
+                    match statement.interpret(&mut environment) {
                         Ok(_) => (),
-                        Err(err) => println!("{}", err),
+                        Err(err) => {
+                            panic!("{}", err);
+                        }
                     };
                 }
             }

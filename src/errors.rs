@@ -14,7 +14,7 @@ impl SyntaxError {
 
 impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at line number {}", self.message, self.line)
+        write!(f, "[SyntaxError]: {} [line: {}]", self.message, self.line)
     }
 }
 
@@ -32,6 +32,6 @@ impl RuntimeError {
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at line number {}", self.message, self.line)
+        write!(f, "[RuntimeError]: {} [line: {}]", self.message, self.line)
     }
 }

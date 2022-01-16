@@ -2,6 +2,7 @@ use super::errors::RuntimeError;
 use super::errors::SyntaxError;
 use super::scanner::Token;
 use super::scanner::TokenKind;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::iter::Peekable;
 use std::slice::Iter;
@@ -147,11 +148,17 @@ impl Expr {
         }
     }
 
-    fn eval(&self) -> Result<Literal, RuntimeError> {
+    fn eval(&self, environment: &HashMap<String, Literal>) -> Result<Literal, RuntimeError> {
         match self {
-            Self::Literal(_line, literal) => Ok(literal.clone()),
+            Self::Literal(line, literal) => Ok(match literal {
+                Literal::Identifier(name) => match environment.get(name) {
+                    Some(value) => value.clone(),
+                    None => return Err(RuntimeError::new(format!("{} is undefined", name), *line)),
+                },
+                value => value.clone(),
+            }),
             Self::Unary(line, operator, expr) => {
-                let right = expr.eval()?;
+                let right = expr.eval(environment)?;
 
                 match operator {
                     UnaryOperator::Bang => {
@@ -171,8 +178,8 @@ impl Expr {
                 }
             }
             Self::Binary(line, operator, expr_1, expr_2) => {
-                let left = expr_1.eval()?;
-                let right = expr_2.eval()?;
+                let left = expr_1.eval(environment)?;
+                let right = expr_2.eval(environment)?;
 
                 match operator {
                     BinaryOperator::Plus => match (left, right) {
@@ -305,17 +312,33 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn interpret(&self) -> Result<(), RuntimeError> {
+    pub fn interpret(
+        &self,
+        environment: &mut HashMap<String, Literal>,
+    ) -> Result<(), RuntimeError> {
         match self {
             Self::Print(expr) => {
-                println!("{}", expr.eval()?.to_string());
+                println!("{}", expr.eval(&environment)?.to_string());
                 Ok(())
             }
             Self::Expr(expr) => {
-                expr.eval()?;
+                expr.eval(&environment)?;
                 Ok(())
             }
-            Self::VarDecl(_line, _name, _initializer) => Ok(()),
+            Self::VarDecl(line, name, initializer) => {
+                if !environment.contains_key(name) {
+                    match initializer {
+                        Some(expr) => environment.insert(name.clone(), expr.eval(&environment)?),
+                        None => environment.insert(name.clone(), Literal::Nil),
+                    };
+                } else {
+                    return Err(RuntimeError::new(
+                        format!("Couldn't redefine {}", name),
+                        *line,
+                    ));
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -1114,6 +1137,8 @@ mod tests {
 
     #[test]
     fn unary_expressions_eval() {
+        let mut environment = HashMap::new();
+
         // -4
         assert_eq!(
             Expr::Unary(
@@ -1121,7 +1146,7 @@ mod tests {
                 UnaryOperator::Minus,
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::Number(-4.0))
         );
 
@@ -1132,7 +1157,7 @@ mod tests {
                 UnaryOperator::Minus,
                 Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
             )
-            .eval(),
+            .eval(&mut environment),
             Err(RuntimeError::new(
                 String::from("The negative operator works only with numbers"),
                 1
@@ -1146,7 +1171,7 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::True))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False)
         );
 
@@ -1157,7 +1182,7 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::Nil))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True)
         );
 
@@ -1168,7 +1193,7 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::Nil))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True)
         );
 
@@ -1179,7 +1204,7 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::String(String::from("nil"))))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False)
         );
 
@@ -1190,7 +1215,7 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::String(String::from(""))))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False)
         );
 
@@ -1201,13 +1226,15 @@ mod tests {
                 UnaryOperator::Bang,
                 Box::new(Expr::Literal(1, Literal::Number(0.0)))
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False)
         );
     }
 
     #[test]
     fn binary_expressions_eval() {
+        let mut environment = HashMap::new();
+
         // 4 + 3
         assert_eq!(
             Expr::Binary(
@@ -1216,7 +1243,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::Number(7.0)),
         );
 
@@ -1228,7 +1255,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
                 Box::new(Expr::Literal(1, Literal::String(String::from("mostafa")))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::String(String::from("yosefmostafa"))),
         );
 
@@ -1240,7 +1267,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0)))
             )
-            .eval(),
+            .eval(&mut environment),
             Err(RuntimeError::new(
                 String::from("Both operands should be either strings or numbers"),
                 1
@@ -1255,7 +1282,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::Number(1.0)),
         );
 
@@ -1267,7 +1294,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::Number(12.0)),
         );
 
@@ -1279,7 +1306,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::String(String::from("yosef")))),
             )
-            .eval(),
+            .eval(&mut environment),
             Err(RuntimeError::new(
                 String::from("Both operands should be numbers"),
                 1
@@ -1294,7 +1321,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             // 😃
             Ok(Literal::Number(4.0 / 3.0)),
         );
@@ -1307,7 +1334,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True),
         );
 
@@ -1319,7 +1346,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::String(String::from("4")))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False)
         );
 
@@ -1331,7 +1358,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False),
         );
 
@@ -1343,7 +1370,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True),
         );
 
@@ -1355,7 +1382,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True),
         );
 
@@ -1367,7 +1394,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False),
         );
 
@@ -1379,7 +1406,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::False),
         );
 
@@ -1391,7 +1418,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::String(String::from("3")))),
             )
-            .eval(),
+            .eval(&mut environment),
             Err(RuntimeError::new(
                 String::from("Both operands should be numbers"),
                 1
@@ -1406,7 +1433,7 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::Number(3.0)),
         );
 
@@ -1423,7 +1450,7 @@ mod tests {
                     Box::new(Expr::Literal(1, Literal::Number(3.0))),
                 )),
             )
-            .eval(),
+            .eval(&mut environment),
             Ok(Literal::True),
         );
     }
