@@ -9,6 +9,8 @@ use std::slice::Iter;
 /*
     GRAMMAR
         program -> statement*
+        declaration -> var-declaration | statement
+        var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
         statement -> print-statement | expression-statement
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
@@ -299,6 +301,7 @@ impl Expr {
 pub enum Statement {
     Print(Expr),
     Expr(Expr),
+    VarDecl(usize, String, Option<Expr>),
 }
 
 impl Statement {
@@ -312,6 +315,7 @@ impl Statement {
                 expr.eval()?;
                 Ok(())
             }
+            Self::VarDecl(_line, _name, _initializer) => Ok(()),
         }
     }
 }
@@ -600,6 +604,64 @@ fn parse_statement(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Statement,
     }
 }
 
+fn parse_var_declaration(
+    tokens_iter: &mut Peekable<Iter<Token>>,
+) -> Result<Statement, SyntaxError> {
+    let var_token = tokens_iter.next().unwrap();
+
+    let name_err = SyntaxError::new(
+        String::from("Expected an identifer after the 'var' keyword"),
+        var_token.line,
+    );
+
+    let name = match tokens_iter.next() {
+        Some(token) => match &token.kind {
+            TokenKind::Identifier(value) => value,
+            _ => return Err(name_err),
+        },
+        _ => return Err(name_err),
+    };
+
+    let semicolon_err = SyntaxError::new(
+        String::from("Expected ';' at the end of the statement"),
+        var_token.line,
+    );
+
+    // checking whether there's an initializer or not
+    match tokens_iter.next() {
+        Some(token) => match token.kind {
+            TokenKind::Equal => {
+                let expression = parse_expression(tokens_iter)?;
+
+                match tokens_iter.next() {
+                    Some(token) => match token.kind {
+                        TokenKind::Semicolon => Ok(Statement::VarDecl(
+                            var_token.line,
+                            name.clone(),
+                            Some(expression),
+                        )),
+                        _ => Err(semicolon_err),
+                    },
+                    _ => Err(semicolon_err),
+                }
+            }
+            TokenKind::Semicolon => Ok(Statement::VarDecl(var_token.line, name.clone(), None)),
+            _ => Err(semicolon_err),
+        },
+        _ => Err(semicolon_err),
+    }
+}
+
+fn parse_declaration(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Statement, SyntaxError> {
+    let token = tokens_iter.peek().unwrap();
+
+    if token.kind == TokenKind::Var {
+        Ok(parse_var_declaration(tokens_iter)?)
+    } else {
+        Ok(parse_statement(tokens_iter)?)
+    }
+}
+
 fn synchronize(tokens_iter: &mut Peekable<Iter<Token>>) {
     while let Some(token) = tokens_iter.peek() {
         if token.kind == TokenKind::Semicolon {
@@ -636,7 +698,7 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
 
     while let Some(token) = tokens_iter.peek() {
         if token.kind != TokenKind::End {
-            match parse_statement(&mut tokens_iter) {
+            match parse_declaration(&mut tokens_iter) {
                 Ok(statement) => statements.push(statement),
                 Err(err) => {
                     errs.push(err);
@@ -657,6 +719,7 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Statement>, Vec<SyntaxError>> {
                 Some(statement) => match statement {
                     Statement::Expr(expr) => expr.get_line(),
                     Statement::Print(expr) => expr.get_line(),
+                    Statement::VarDecl(line, _name, _expr) => *line,
                 },
                 _ => 1,
             },
@@ -958,7 +1021,95 @@ mod tests {
                 Box::new(Expr::Literal(1, Literal::Number(4.0))),
                 Box::new(Expr::Literal(1, Literal::Number(3.0))),
             )))
-        )
+        );
+
+        // print 4 * 3;
+        let tokens = [
+            Token::new(TokenKind::Print, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Semicolon, 1),
+        ];
+
+        assert_eq!(
+            parse_statement(&mut tokens.iter().peekable()),
+            Ok(Statement::Print(Expr::Binary(
+                1,
+                BinaryOperator::Star,
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                Box::new(Expr::Literal(1, Literal::Number(3.0))),
+            )))
+        );
+
+        // var x = 4 * 3;
+        let tokens = [
+            Token::new(TokenKind::Var, 1),
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+            Token::new(TokenKind::Equal, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+            Token::new(TokenKind::Semicolon, 1),
+        ];
+
+        assert_eq!(
+            parse_declaration(&mut tokens.iter().peekable()),
+            Ok(Statement::VarDecl(
+                1,
+                String::from("x"),
+                Some(Expr::Binary(
+                    1,
+                    BinaryOperator::Star,
+                    Box::new(Expr::Literal(1, Literal::Number(4.0))),
+                    Box::new(Expr::Literal(1, Literal::Number(3.0))),
+                )),
+            )),
+        );
+
+        // var x = 4 * 3
+        let tokens = [
+            Token::new(TokenKind::Var, 1),
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+            Token::new(TokenKind::Equal, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+            Token::new(TokenKind::Star, 1),
+            Token::new(TokenKind::Number(3.0), 1),
+        ];
+
+        assert_eq!(
+            parse_declaration(&mut tokens.iter().peekable()),
+            Err(SyntaxError::new(
+                String::from("Expected ';' at the end of the statement"),
+                1,
+            )),
+        );
+
+        // var x;
+        let tokens = [
+            Token::new(TokenKind::Var, 1),
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+            Token::new(TokenKind::Semicolon, 1),
+        ];
+
+        assert_eq!(
+            parse_declaration(&mut tokens.iter().peekable()),
+            Ok(Statement::VarDecl(1, String::from("x"), None)),
+        );
+
+        // var x
+        let tokens = [
+            Token::new(TokenKind::Var, 1),
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+        ];
+
+        assert_eq!(
+            parse_declaration(&mut tokens.iter().peekable()),
+            Err(SyntaxError::new(
+                String::from("Expected ';' at the end of the statement"),
+                1,
+            )),
+        );
     }
 
     #[test]
