@@ -15,7 +15,8 @@ use std::slice::Iter;
         statement -> print-statement | expression-statement
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
-        expression -> comma
+        expression -> assignment
+        assignment -> IDENTIFIER "=" assignment | comma
         comma -> equality ("," equality)*
         equality -> comparison (("==" | "!=") comparison)*
         comparison -> term ((">" | ">=" | "<" | "<=") term)*
@@ -99,6 +100,7 @@ pub enum BinaryOperator {
     Minus,
     Star,
     Slash,
+    Equal,
     BangEqual,
     EqualEqual,
     Greater,
@@ -117,6 +119,7 @@ impl TryFrom<TokenKind> for BinaryOperator {
             TokenKind::Minus => Ok(Self::Minus),
             TokenKind::Star => Ok(Self::Star),
             TokenKind::Slash => Ok(Self::Slash),
+            TokenKind::Equal => Ok(Self::Equal),
             TokenKind::BangEqual => Ok(Self::BangEqual),
             TokenKind::EqualEqual => Ok(Self::EqualEqual),
             TokenKind::Greater => Ok(Self::Greater),
@@ -298,6 +301,7 @@ impl Expr {
                         )),
                     },
                     BinaryOperator::Comma => Ok(right),
+                    BinaryOperator::Equal => Ok(Literal::Nil),
                 }
             }
         }
@@ -572,10 +576,31 @@ fn parse_comma(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxEr
     Ok(comma)
 }
 
-fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+fn parse_assignment(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
     let comma = parse_comma(tokens_iter)?;
+    if let Some(token) = tokens_iter.peek() {
+        if let TokenKind::Equal = &token.kind {
+            let line = token.line;
+            tokens_iter.next();
+            let assignment = parse_assignment(tokens_iter)?;
+            Ok(Expr::Binary(
+                line,
+                BinaryOperator::Equal,
+                Box::new(comma),
+                Box::new(assignment),
+            ))
+        } else {
+            Ok(comma)
+        }
+    } else {
+        Ok(comma)
+    }
+}
 
-    Ok(comma)
+fn parse_expression(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, SyntaxError> {
+    let assignment = parse_assignment(tokens_iter)?;
+
+    Ok(assignment)
 }
 
 fn parse_print_statement(
@@ -601,7 +626,7 @@ fn parse_print_statement(
 fn parse_expression_statement(
     tokens_iter: &mut Peekable<Iter<Token>>,
 ) -> Result<Statement, SyntaxError> {
-    let expression = parse_expression(tokens_iter)?;
+    let expression = parse_comma(tokens_iter)?;
     let err = SyntaxError::new(
         String::from("Expected ';' at the end of the statement"),
         expression.get_line(),
@@ -766,7 +791,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_expressions_correct_precendence() {
+    fn parses_expressions() {
         // 4
         let tokens = vec![Token::new(TokenKind::Number(4.0), 1)];
 
@@ -972,6 +997,47 @@ mod tests {
                 )),
                 Box::new(Expr::Literal(1, Literal::False))
             )),
+        );
+
+        // x = 4
+        let tokens = vec![
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+            Token::new(TokenKind::Equal, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+        ];
+
+        assert_eq!(
+            parse_expression(&mut tokens.iter().peekable()),
+            Ok(Expr::Binary(
+                1,
+                BinaryOperator::Equal,
+                Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
+                Box::new(Expr::Literal(1, Literal::Number(4.0))),
+            ))
+        );
+
+        // x = y = 4
+        let tokens = vec![
+            Token::new(TokenKind::Identifier(String::from("x")), 1),
+            Token::new(TokenKind::Equal, 1),
+            Token::new(TokenKind::Identifier(String::from("y")), 1),
+            Token::new(TokenKind::Equal, 1),
+            Token::new(TokenKind::Number(4.0), 1),
+        ];
+
+        assert_eq!(
+            parse_expression(&mut tokens.iter().peekable()),
+            Ok(Expr::Binary(
+                1,
+                BinaryOperator::Equal,
+                Box::new(Expr::Literal(1, Literal::Identifier(String::from("x")))),
+                Box::new(Expr::Binary(
+                    1,
+                    BinaryOperator::Equal,
+                    Box::new(Expr::Literal(1, Literal::Identifier(String::from("y")))),
+                    Box::new(Expr::Literal(1, Literal::Number(4.0)))
+                )),
+            ))
         );
 
         // + 3
