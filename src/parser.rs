@@ -151,7 +151,7 @@ impl Expr {
         }
     }
 
-    fn eval(&self, environment: &HashMap<String, Literal>) -> Result<Literal, RuntimeError> {
+    fn eval(&self, environment: &mut HashMap<String, Literal>) -> Result<Literal, RuntimeError> {
         match self {
             Self::Literal(line, literal) => Ok(match literal {
                 Literal::Identifier(name) => match environment.get(name) {
@@ -301,7 +301,23 @@ impl Expr {
                         )),
                     },
                     BinaryOperator::Comma => Ok(right),
-                    BinaryOperator::Equal => Ok(Literal::Nil),
+                    BinaryOperator::Equal => {
+                        match &**expr_1 {
+                            Expr::Literal(line, Literal::Identifier(name)) => {
+                                if environment.contains_key(name) {
+                                    environment.insert(name.clone(), right.clone());
+                                    Ok(right)
+                                } else {
+                                    Err(RuntimeError::new(format!("{} is undefined", name), *line))
+                                }
+                            }
+                            //TODO solve later
+                            _ => Err(RuntimeError::new(
+                                String::from("Bad assignment target"),
+                                expr_1.get_line(),
+                            )),
+                        }
+                    }
                 }
             }
         }
@@ -322,17 +338,20 @@ impl Statement {
     ) -> Result<(), RuntimeError> {
         match self {
             Self::Print(expr) => {
-                println!("{}", expr.eval(&environment)?.to_string());
+                println!("{}", expr.eval(environment)?.to_string());
                 Ok(())
             }
             Self::Expr(expr) => {
-                expr.eval(&environment)?;
+                expr.eval(environment)?;
                 Ok(())
             }
             Self::VarDecl(line, name, initializer) => {
                 if !environment.contains_key(name) {
                     match initializer {
-                        Some(expr) => environment.insert(name.clone(), expr.eval(&environment)?),
+                        Some(expr) => {
+                            let value = expr.eval(environment)?;
+                            environment.insert(name.clone(), value)
+                        }
                         None => environment.insert(name.clone(), Literal::Nil),
                     };
                 } else {
@@ -580,11 +599,10 @@ fn parse_assignment(tokens_iter: &mut Peekable<Iter<Token>>) -> Result<Expr, Syn
     let comma = parse_comma(tokens_iter)?;
     if let Some(token) = tokens_iter.peek() {
         if let TokenKind::Equal = &token.kind {
-            let line = token.line;
-            tokens_iter.next();
+            let equal = tokens_iter.next().unwrap();
             let assignment = parse_assignment(tokens_iter)?;
             Ok(Expr::Binary(
-                line,
+                equal.line,
                 BinaryOperator::Equal,
                 Box::new(comma),
                 Box::new(assignment),
@@ -626,7 +644,7 @@ fn parse_print_statement(
 fn parse_expression_statement(
     tokens_iter: &mut Peekable<Iter<Token>>,
 ) -> Result<Statement, SyntaxError> {
-    let expression = parse_comma(tokens_iter)?;
+    let expression = parse_expression(tokens_iter)?;
     let err = SyntaxError::new(
         String::from("Expected ';' at the end of the statement"),
         expression.get_line(),
