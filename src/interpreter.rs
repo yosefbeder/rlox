@@ -35,6 +35,12 @@ impl Interpreter {
                     }),
                 }
             }
+            Statement::Block(declarations) => {
+                for declaration in declarations {
+                    println!("{:?}", declaration);
+                }
+                Ok(())
+            }
         }
     }
 

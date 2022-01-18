@@ -7,7 +7,8 @@ use super::Error;
         program -> statement*
         declaration -> var-declaration | statement
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> print-statement | expression-statement
+        statement -> print-statement | expression-statement | block
+        block -> "{" declaration* "}"
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
         expression -> assignment
@@ -152,6 +153,7 @@ pub enum Statement {
     Print(Expr),
     Expr(Expr),
     VarDecl(usize, String, Option<Expr>),
+    Block(Vec<Box<Statement>>),
 }
 
 pub struct Parser {
@@ -489,6 +491,8 @@ impl Parser {
 
         if token.kind == TokenKind::Print {
             Ok(self.print_statement()?)
+        } else if token.kind == TokenKind::LeftBrace {
+            Ok(self.block()?)
         } else {
             Ok(self.expression_statement()?)
         }
@@ -548,6 +552,36 @@ impl Parser {
         }
     }
 
+    fn block(&mut self) -> Result<Statement, Error> {
+        self.next();
+        let mut declarations = vec![];
+
+        while let Some(token) = self.peek() {
+            if token.kind == TokenKind::RightBrace {
+                break;
+            }
+            declarations.push(Box::new(self.declaration()?));
+        }
+
+        if let Some(token) = self.peek() {
+            if token.kind == TokenKind::RightBrace {
+                self.next();
+                Ok(Statement::Block(declarations))
+            } else {
+                //TODO do something about that
+                Err(Error::Syntax {
+                    message: String::from("Can't happen"),
+                    line: token.line,
+                })
+            }
+        } else {
+            Err(Error::Syntax {
+                message: String::from("Unterminted block"),
+                line: self.tokens.iter().last().unwrap().line,
+            })
+        }
+    }
+
     fn synchronize(&mut self) {
         while let Some(token) = self.peek() {
             if token.kind == TokenKind::Semicolon {
@@ -602,9 +636,10 @@ impl Parser {
                 message: String::from("Expected the end of the file"),
                 line: match statements.iter().last() {
                     Some(statement) => match statement {
-                        Statement::Expr(expr) => expr.get_line(),
-                        Statement::Print(expr) => expr.get_line(),
-                        Statement::VarDecl(line, _name, _expr) => *line,
+                        Statement::Expr(_) => self.tokens.iter().last().unwrap().line,
+                        Statement::Print(_) => self.tokens.iter().last().unwrap().line,
+                        Statement::VarDecl(_, _, _) => self.tokens.iter().last().unwrap().line,
+                        Statement::Block(_) => self.tokens.iter().last().unwrap().line,
                     },
                     _ => 1,
                 },
