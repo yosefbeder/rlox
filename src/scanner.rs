@@ -79,12 +79,13 @@ impl Scanner {
     }
 
     fn next(&mut self) -> Option<char> {
+        let current_char = self.code.chars().nth(self.current);
         self.current += 1;
-        self.code.chars().nth(self.current)
+        current_char
     }
 
     fn peek(&mut self) -> Option<char> {
-        self.code.chars().nth(self.current + 1)
+        self.code.chars().nth(self.current)
     }
 
     pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {

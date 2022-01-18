@@ -165,12 +165,13 @@ impl Parser {
     }
 
     fn next(&mut self) -> Option<&Token> {
+        let current_token = self.tokens.get(self.current);
         self.current += 1;
-        self.tokens.get(self.current)
+        current_token
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.current + 1)
+        self.tokens.get(self.current)
     }
 
     fn primary(&mut self) -> Result<Expr, SyntaxError> {

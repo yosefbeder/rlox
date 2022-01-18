@@ -226,12 +226,11 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self) {
+    pub fn interpret(&mut self) -> Result<(), RuntimeError> {
         while let Some(_) = self.program.iter().nth(self.current) {
-            match self.statement() {
-                Ok(()) => {}
-                Err(err) => panic!("{}", err),
-            }
+            println!("interpreting");
+            self.statement()?;
         }
+        Ok(())
     }
 }
