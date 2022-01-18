@@ -1,54 +1,62 @@
+use super::environment::Environment;
 use super::errors::RuntimeError;
 use super::parser::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
-use std::collections::HashMap;
 
 pub struct Interpreter {
     program: Vec<Statement>,
+    environment: Environment,
+    current: usize,
 }
 
 impl Interpreter {
     pub fn new(program: Vec<Statement>) -> Self {
-        Self { program }
+        Self {
+            program,
+            environment: Environment::new(None),
+            current: 0,
+        }
     }
 
-    fn statement(
-        &self,
-        statement: &Statement,
-        environment: &mut HashMap<String, Literal>,
-    ) -> Result<(), RuntimeError> {
+    fn statement(&mut self) -> Result<(), RuntimeError> {
+        let statement = self.program.get(self.current).unwrap();
+
         match statement {
             Statement::Print(expr) => {
-                println!("{}", self.expression(expr, environment)?.to_string());
+                println!(
+                    "{}",
+                    Self::expression(expr, &mut self.environment)?.to_string()
+                );
+                self.current += 1;
                 Ok(())
             }
             Statement::Expr(expr) => {
-                self.expression(expr, environment)?;
+                Self::expression(expr, &mut self.environment)?;
+                self.current += 1;
                 Ok(())
             }
             Statement::VarDecl(line, name, initializer) => {
-                if !environment.contains_key(name) {
-                    match initializer {
-                        Some(expr) => {
-                            let value = self.expression(expr, environment)?;
-                            environment.insert(name.clone(), value)
-                        }
-                        None => environment.insert(name.clone(), Literal::Nil),
-                    };
-                } else {
-                    return Err(RuntimeError::new(
-                        format!("Couldn't redefine {}", name),
+                let right = match initializer {
+                    Some(expr) => Self::expression(expr, &mut self.environment)?,
+                    None => Literal::Nil,
+                };
+
+                match self.environment.define(name, right) {
+                    Ok(_) => {
+                        self.current += 1;
+                        Ok(())
+                    }
+                    Err(_) => Err(RuntimeError::new(
+                        format!("{} is defined before", name),
                         *line,
-                    ));
+                    )),
                 }
-                Ok(())
             }
         }
     }
 
     fn expression(
-        &self,
         expression: &Expr,
-        environment: &mut HashMap<String, Literal>,
+        environment: &mut Environment,
     ) -> Result<Literal, RuntimeError> {
         match expression {
             Expr::Literal(line, literal) => Ok(match literal {
@@ -59,7 +67,7 @@ impl Interpreter {
                 value => value.clone(),
             }),
             Expr::Unary(line, operator, expr) => {
-                let right = self.expression(expr, environment)?;
+                let right = Self::expression(expr, environment)?;
 
                 match operator {
                     UnaryOperator::Bang => {
@@ -79,8 +87,8 @@ impl Interpreter {
                 }
             }
             Expr::Binary(line, operator, expr_1, expr_2) => {
-                let left = self.expression(expr_1, environment)?;
-                let right = self.expression(expr_2, environment)?;
+                let left = Self::expression(expr_1, environment)?;
+                let right = Self::expression(expr_2, environment)?;
 
                 match operator {
                     BinaryOperator::Plus => match (left, right) {
@@ -199,38 +207,31 @@ impl Interpreter {
                         )),
                     },
                     BinaryOperator::Comma => Ok(right),
-                    BinaryOperator::Equal => {
-                        match &**expr_1 {
-                            Expr::Literal(line, Literal::Identifier(name)) => {
-                                if environment.contains_key(name) {
-                                    environment.insert(name.clone(), right.clone());
-                                    Ok(right)
-                                } else {
+                    BinaryOperator::Equal => match &**expr_1 {
+                        Expr::Literal(line, Literal::Identifier(name)) => {
+                            match environment.assign(name, right.clone()) {
+                                Ok(()) => Ok(right),
+                                Err(_) => {
                                     Err(RuntimeError::new(format!("{} is undefined", name), *line))
                                 }
                             }
-                            //TODO solve later
-                            _ => Err(RuntimeError::new(
-                                String::from("Bad assignment target"),
-                                expr_1.get_line(),
-                            )),
                         }
-                    }
+                        _ => Err(RuntimeError::new(
+                            String::from("Bad assignment target"),
+                            expr_1.get_line(),
+                        )),
+                    },
                 }
             }
         }
     }
 
-    pub fn interpret(&self) {
-        let mut environment = HashMap::new();
-
-        for statement in &self.program {
-            match self.statement(statement, &mut environment) {
-                Ok(_) => (),
-                Err(err) => {
-                    panic!("{}", err);
-                }
-            };
+    pub fn interpret(&mut self) {
+        while let Some(_) = self.program.iter().nth(self.current) {
+            match self.statement() {
+                Ok(()) => {}
+                Err(err) => panic!("{}", err),
+            }
         }
     }
 }
