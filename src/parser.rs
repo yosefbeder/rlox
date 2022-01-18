@@ -1,6 +1,6 @@
-use super::errors::SyntaxError;
 use super::scanner::Token;
 use super::scanner::TokenKind;
+use super::Error;
 
 /*
     GRAMMAR
@@ -174,7 +174,7 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn primary(&mut self) -> Result<Expr, SyntaxError> {
+    fn primary(&mut self) -> Result<Expr, Error> {
         let token = self.next().unwrap();
 
         if let Ok(literal) = Literal::try_from(token.kind.clone()) {
@@ -183,10 +183,10 @@ impl Parser {
             match token.kind {
                 TokenKind::LeftParen => {
                     let expression = self.expression()?;
-                    let err = SyntaxError::new(
-                        String::from("Expected a closing parenthese"),
-                        expression.get_line(),
-                    );
+                    let err = Error::Syntax {
+                        message: String::from("Expected a closing parenthese"),
+                        line: expression.get_line(),
+                    };
 
                     if let Some(token) = self.next() {
                         match token.kind {
@@ -197,15 +197,15 @@ impl Parser {
                         Err(err)
                     }
                 }
-                _ => Err(SyntaxError::new(
-                    String::from("Expected an expression"),
-                    token.line,
-                )),
+                _ => Err(Error::Syntax {
+                    message: String::from("Expected an expression"),
+                    line: token.line,
+                }),
             }
         }
     }
 
-    fn unary(&mut self) -> Result<Expr, SyntaxError> {
+    fn unary(&mut self) -> Result<Expr, Error> {
         let token = self.peek().unwrap();
 
         if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
@@ -217,7 +217,7 @@ impl Parser {
         }
     }
 
-    fn factor(&mut self) -> Result<Expr, SyntaxError> {
+    fn factor(&mut self) -> Result<Expr, Error> {
         let mut factor = self.unary()?;
 
         while let Some(token) = self.peek() {
@@ -251,7 +251,7 @@ impl Parser {
         Ok(factor)
     }
 
-    fn term(&mut self) -> Result<Expr, SyntaxError> {
+    fn term(&mut self) -> Result<Expr, Error> {
         let mut term = self.factor()?;
 
         while let Some(token) = self.peek() {
@@ -285,7 +285,7 @@ impl Parser {
         Ok(term)
     }
 
-    fn comparison(&mut self) -> Result<Expr, SyntaxError> {
+    fn comparison(&mut self) -> Result<Expr, Error> {
         let mut comparison = self.term()?;
 
         while let Some(token) = self.peek() {
@@ -351,7 +351,7 @@ impl Parser {
         Ok(comparison)
     }
 
-    fn equality(&mut self) -> Result<Expr, SyntaxError> {
+    fn equality(&mut self) -> Result<Expr, Error> {
         let mut equality = self.comparison()?;
 
         while let Some(token) = self.peek() {
@@ -393,7 +393,7 @@ impl Parser {
         Ok(equality)
     }
 
-    fn comma(&mut self) -> Result<Expr, SyntaxError> {
+    fn comma(&mut self) -> Result<Expr, Error> {
         let mut comma = self.equality()?;
 
         while let Some(token) = self.peek() {
@@ -423,7 +423,7 @@ impl Parser {
         Ok(comma)
     }
 
-    fn assignment(&mut self) -> Result<Expr, SyntaxError> {
+    fn assignment(&mut self) -> Result<Expr, Error> {
         let comma = self.comma()?;
         if let Some(token) = self.peek() {
             if let TokenKind::Equal = &token.kind {
@@ -443,19 +443,19 @@ impl Parser {
         }
     }
 
-    fn expression(&mut self) -> Result<Expr, SyntaxError> {
+    fn expression(&mut self) -> Result<Expr, Error> {
         let assignment = self.assignment()?;
 
         Ok(assignment)
     }
 
-    fn print_statement(&mut self) -> Result<Statement, SyntaxError> {
+    fn print_statement(&mut self) -> Result<Statement, Error> {
         self.next();
         let expression = self.expression()?;
-        let err = SyntaxError::new(
-            String::from("Expected ';' at the end of the statement"),
-            expression.get_line(),
-        );
+        let err = Error::Syntax {
+            message: String::from("Expected ';' at the end of the statement"),
+            line: expression.get_line(),
+        };
         if let Some(token) = self.next() {
             if token.kind == TokenKind::Semicolon {
                 Ok(Statement::Print(expression))
@@ -467,12 +467,12 @@ impl Parser {
         }
     }
 
-    fn expression_statement(&mut self) -> Result<Statement, SyntaxError> {
+    fn expression_statement(&mut self) -> Result<Statement, Error> {
         let expression = self.expression()?;
-        let err = SyntaxError::new(
-            String::from("Expected ';' at the end of the statement"),
-            expression.get_line(),
-        );
+        let err = Error::Syntax {
+            message: String::from("Expected ';' at the end of the statement"),
+            line: expression.get_line(),
+        };
         if let Some(token) = self.next() {
             if token.kind == TokenKind::Semicolon {
                 Ok(Statement::Expr(expression))
@@ -484,7 +484,7 @@ impl Parser {
         }
     }
 
-    fn statement(&mut self) -> Result<Statement, SyntaxError> {
+    fn statement(&mut self) -> Result<Statement, Error> {
         let token = self.peek().unwrap();
 
         if token.kind == TokenKind::Print {
@@ -494,14 +494,14 @@ impl Parser {
         }
     }
 
-    fn var_declaration(&mut self) -> Result<Statement, SyntaxError> {
+    fn var_declaration(&mut self) -> Result<Statement, Error> {
         let var_token = self.next().unwrap();
         let line = var_token.line;
 
-        let name_err = SyntaxError::new(
-            String::from("Expected an identifer after the 'var' keyword"),
+        let name_err = Error::Syntax {
+            message: String::from("Expected an identifer after the 'var' keyword"),
             line,
-        );
+        };
 
         let name = match self.next() {
             Some(token) => match &token.kind {
@@ -511,10 +511,10 @@ impl Parser {
             _ => return Err(name_err),
         };
 
-        let semicolon_err = SyntaxError::new(
-            String::from("Expected ';' at the end of the statement"),
+        let semicolon_err = Error::Syntax {
+            message: String::from("Expected ';' at the end of the statement"),
             line,
-        );
+        };
 
         // checking whether there's an initializer or not
         match self.next() {
@@ -538,7 +538,7 @@ impl Parser {
         }
     }
 
-    fn declaration(&mut self) -> Result<Statement, SyntaxError> {
+    fn declaration(&mut self) -> Result<Statement, Error> {
         let token = self.peek().unwrap();
 
         if token.kind == TokenKind::Var {
@@ -577,7 +577,7 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Statement>, Vec<SyntaxError>> {
+    pub fn parse(&mut self) -> Result<Vec<Statement>, Vec<Error>> {
         let mut statements = vec![];
         let mut errs = vec![];
 
@@ -598,9 +598,9 @@ impl Parser {
         if errs.len() > 1 {
             Err(errs)
         } else {
-            let err = SyntaxError::new(
-                String::from("Expected the end of the file"),
-                match statements.iter().last() {
+            let err = Error::Syntax {
+                message: String::from("Expected the end of the file"),
+                line: match statements.iter().last() {
                     Some(statement) => match statement {
                         Statement::Expr(expr) => expr.get_line(),
                         Statement::Print(expr) => expr.get_line(),
@@ -608,7 +608,7 @@ impl Parser {
                     },
                     _ => 1,
                 },
-            );
+            };
             if let Some(token) = self.next() {
                 if token.kind == TokenKind::End {
                     Ok(statements)

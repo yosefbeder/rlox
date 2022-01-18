@@ -1,1 +1,10 @@
 print 3 + 2;
+var x = 3;
+x = 2;
+print x;
+var y = x;
+print y;
+var z;
+print z;
+z = x = y;
+print z;

@@ -1,4 +1,4 @@
-use super::errors::SyntaxError;
+use super::Error;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -88,7 +88,7 @@ impl Scanner {
         self.code.chars().nth(self.current)
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, SyntaxError> {
+    pub fn scan(&mut self) -> Result<Vec<Token>, Error> {
         let keywords_map = HashMap::from([
             (String::from("and"), TokenKind::And),
             (String::from("class"), TokenKind::Class),
@@ -197,10 +197,10 @@ impl Scanner {
                             }
                             continue;
                         } else {
-                            return Err(SyntaxError::new(
-                                String::from("Unterminated multi-line comment"),
-                                self.line,
-                            ));
+                            return Err(Error::Syntax {
+                                message: String::from("Unterminated multi-line comment"),
+                                line: self.line,
+                            });
                         }
                     }
                     continue;
@@ -276,10 +276,10 @@ impl Scanner {
                             continue;
                         }
                         None => {
-                            return Err(SyntaxError::new(
-                                String::from("Unterminated string"),
-                                self.line,
-                            ))
+                            return Err(Error::Syntax {
+                                message: String::from("Unterminated string"),
+                                line: self.line,
+                            });
                         }
                     }
                 }
@@ -367,10 +367,10 @@ impl Scanner {
                 continue;
             }
 
-            return Err(SyntaxError::new(
-                format!("Unexpected character {}", ch),
-                self.line,
-            ));
+            return Err(Error::Syntax {
+                message: format!("Unexpected character {}", ch),
+                line: self.line,
+            });
         }
 
         tokens.push(Token::new(TokenKind::End, self.line));

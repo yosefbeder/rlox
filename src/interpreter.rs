@@ -1,73 +1,63 @@
 use super::environment::Environment;
-use super::errors::RuntimeError;
 use super::parser::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use super::Error;
 
 pub struct Interpreter {
     program: Vec<Statement>,
-    environment: Environment,
-    current: usize,
 }
 
 impl Interpreter {
     pub fn new(program: Vec<Statement>) -> Self {
-        Self {
-            program,
-            environment: Environment::new(None),
-            current: 0,
-        }
+        Self { program }
     }
 
-    fn statement(&mut self) -> Result<(), RuntimeError> {
-        let statement = self.program.get(self.current).unwrap();
-
+    fn statement(&self, statement: &Statement, environment: &mut Environment) -> Result<(), Error> {
         match statement {
             Statement::Print(expr) => {
-                println!(
-                    "{}",
-                    Self::expression(expr, &mut self.environment)?.to_string()
-                );
-                self.current += 1;
+                println!("{}", self.expression(expr, environment)?.to_string());
                 Ok(())
             }
             Statement::Expr(expr) => {
-                Self::expression(expr, &mut self.environment)?;
-                self.current += 1;
+                self.expression(expr, environment)?;
                 Ok(())
             }
             Statement::VarDecl(line, name, initializer) => {
                 let right = match initializer {
-                    Some(expr) => Self::expression(expr, &mut self.environment)?,
+                    Some(expr) => self.expression(expr, environment)?,
                     None => Literal::Nil,
                 };
 
-                match self.environment.define(name, right) {
-                    Ok(_) => {
-                        self.current += 1;
-                        Ok(())
-                    }
-                    Err(_) => Err(RuntimeError::new(
-                        format!("{} is defined before", name),
-                        *line,
-                    )),
+                match environment.define(name, right) {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(Error::Runtime {
+                        message: format!("{} is defined before", name),
+                        line: *line,
+                    }),
                 }
             }
         }
     }
 
     fn expression(
+        &self,
         expression: &Expr,
         environment: &mut Environment,
-    ) -> Result<Literal, RuntimeError> {
+    ) -> Result<Literal, Error> {
         match expression {
             Expr::Literal(line, literal) => Ok(match literal {
                 Literal::Identifier(name) => match environment.get(name) {
                     Some(value) => value.clone(),
-                    None => return Err(RuntimeError::new(format!("{} is undefined", name), *line)),
+                    None => {
+                        return Err(Error::Runtime {
+                            message: format!("{} is undefined", name),
+                            line: *line,
+                        });
+                    }
                 },
                 value => value.clone(),
             }),
             Expr::Unary(line, operator, expr) => {
-                let right = Self::expression(expr, environment)?;
+                let right = self.expression(expr, environment)?;
 
                 match operator {
                     UnaryOperator::Bang => {
@@ -79,16 +69,16 @@ impl Interpreter {
                     }
                     UnaryOperator::Minus => match right {
                         Literal::Number(value) => Ok(Literal::Number(value * -1.0)),
-                        _ => Err(RuntimeError::new(
-                            String::from("The negative operator works only with numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("The negative operator works only with numbers"),
+                            line: *line,
+                        }),
                     },
                 }
             }
             Expr::Binary(line, operator, expr_1, expr_2) => {
-                let left = Self::expression(expr_1, environment)?;
-                let right = Self::expression(expr_2, environment)?;
+                let left = self.expression(expr_1, environment)?;
+                let right = self.expression(expr_2, environment)?;
 
                 match operator {
                     BinaryOperator::Plus => match (left, right) {
@@ -98,37 +88,39 @@ impl Interpreter {
                         (Literal::Number(left), Literal::Number(right)) => {
                             Ok(Literal::Number(left + right))
                         }
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be either strings or numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from(
+                                "Both operands should be either strings or numbers",
+                            ),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::Minus => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => {
                             Ok(Literal::Number(left - right))
                         }
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::Star => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => {
                             Ok(Literal::Number(left * right))
                         }
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::Slash => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => {
                             Ok(Literal::Number(left / right))
                         }
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::BangEqual => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => Ok(if left != right {
@@ -168,10 +160,10 @@ impl Interpreter {
                         } else {
                             Literal::False
                         }),
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::GreaterEqual => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => Ok(if left >= right {
@@ -179,10 +171,10 @@ impl Interpreter {
                         } else {
                             Literal::False
                         }),
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::Less => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => Ok(if left < right {
@@ -190,10 +182,10 @@ impl Interpreter {
                         } else {
                             Literal::False
                         }),
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::LessEqual => match (left, right) {
                         (Literal::Number(left), Literal::Number(right)) => Ok(if left <= right {
@@ -201,35 +193,38 @@ impl Interpreter {
                         } else {
                             Literal::False
                         }),
-                        _ => Err(RuntimeError::new(
-                            String::from("Both operands should be numbers"),
-                            *line,
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: *line,
+                        }),
                     },
                     BinaryOperator::Comma => Ok(right),
                     BinaryOperator::Equal => match &**expr_1 {
                         Expr::Literal(line, Literal::Identifier(name)) => {
                             match environment.assign(name, right.clone()) {
                                 Ok(()) => Ok(right),
-                                Err(_) => {
-                                    Err(RuntimeError::new(format!("{} is undefined", name), *line))
-                                }
+                                Err(_) => Err(Error::Runtime {
+                                    message: format!("{} is undefined", name),
+                                    line: *line,
+                                }),
                             }
                         }
-                        _ => Err(RuntimeError::new(
-                            String::from("Bad assignment target"),
-                            expr_1.get_line(),
-                        )),
+                        _ => Err(Error::Runtime {
+                            message: String::from("Bad assignment target"),
+                            line: expr_1.get_line(),
+                        }),
                     },
                 }
             }
         }
     }
 
-    pub fn interpret(&mut self) -> Result<(), RuntimeError> {
-        while let Some(_) = self.program.iter().nth(self.current) {
-            println!("interpreting");
-            self.statement()?;
+    pub fn interpret(&self, environment: &mut Environment) -> Result<(), Error> {
+        for statement in self.program.iter() {
+            match self.statement(statement, environment) {
+                Ok(()) => {}
+                Err(err) => return Err(err),
+            };
         }
         Ok(())
     }
