@@ -178,6 +178,10 @@ impl Parser {
         current_token
     }
 
+    fn peek_back(&self) -> &Token {
+        &self.tokens[self.current - 1]
+    }
+
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current)
     }
@@ -475,7 +479,6 @@ impl Parser {
     }
 
     fn print_statement(&mut self) -> Result<Statement, Error> {
-        self.next();
         let expression = self.expression()?;
         self.consume(
             TokenKind::Semicolon,
@@ -493,20 +496,48 @@ impl Parser {
         Ok(Statement::Expr(expression))
     }
 
+    fn if_statement(&mut self) -> Result<Statement, Error> {
+        self.consume(
+            TokenKind::LeftParen,
+            "Expected an openning parenthese after the 'if' keyword",
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenKind::RightParen,
+            "Expected a closing parenthese after the condition",
+        )?;
+        let if_branch = self.statement()?;
+        let mut else_branch = None;
+
+        if let Some(token) = self.peek() {
+            if token.kind == TokenKind::Else {
+                self.next();
+                else_branch = Some(Box::new(self.statement()?));
+            }
+        }
+
+        Ok(Statement::If(condition, Box::new(if_branch), else_branch))
+    }
+
     fn statement(&mut self) -> Result<Statement, Error> {
         let token = self.peek().unwrap();
 
         if token.kind == TokenKind::Print {
+            self.next();
             Ok(self.print_statement()?)
         } else if token.kind == TokenKind::LeftBrace {
+            self.next();
             Ok(self.block()?)
+        } else if token.kind == TokenKind::If {
+            self.next();
+            Ok(self.if_statement()?)
         } else {
             Ok(self.expression_statement()?)
         }
     }
 
     fn var_declaration(&mut self) -> Result<Statement, Error> {
-        let var_token = self.next().unwrap();
+        let var_token = self.peek_back();
         let line = var_token.line;
 
         let name_err = Error::Syntax {
@@ -553,6 +584,7 @@ impl Parser {
         let token = self.peek().unwrap();
 
         if token.kind == TokenKind::Var {
+            self.next();
             Ok(self.var_declaration()?)
         } else {
             Ok(self.statement()?)
@@ -560,7 +592,6 @@ impl Parser {
     }
 
     fn block(&mut self) -> Result<Statement, Error> {
-        self.next();
         let mut declarations = vec![];
 
         while let Some(token) = self.peek() {

@@ -1,19 +1,4 @@
-var x = 20;
+var x = 30;
 
-{
-  var x = 30;
-  print x; // 30
-}
-
-print x; // 20
-
-var y = 20;
-
-{
-  y = 30;
-  {
-    "hi";
-  }
-}
-
-print y; // 30
+if (x > 30) print "x is bigger than 30";
+else print "x is 30 or less";
