@@ -3,6 +3,7 @@ use rlox::interpreter::Interpreter;
 use rlox::parser::Parser;
 use rlox::scanner::Scanner;
 use rlox::Error;
+use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::io;
@@ -18,7 +19,7 @@ fn main() {
     }
 }
 
-fn run(code: String, environment: &mut Environment) -> Result<(), Vec<Error>> {
+fn run(code: String, environment: &RefCell<Environment>) -> Result<(), Vec<Error>> {
     let tokens = match Scanner::new(code).scan() {
         Ok(value) => value,
         Err(err) => {
@@ -44,7 +45,8 @@ fn run(code: String, environment: &mut Environment) -> Result<(), Vec<Error>> {
 }
 
 fn run_repl() {
-    let mut environment = Environment::new(None);
+    let environment = RefCell::new(Environment::new(None));
+
     loop {
         let mut line = String::new();
 
@@ -54,7 +56,7 @@ fn run_repl() {
                     break;
                 }
 
-                match run(line, &mut environment) {
+                match run(line, &environment) {
                     Ok(_) => {}
                     Err(errs) => eprintln!("{}", errs[0]),
                 }
@@ -75,9 +77,9 @@ fn run_file(path: String) {
             process::exit(65);
         }
     };
-    let mut environment = Environment::new(None);
+    let environment = RefCell::new(Environment::new(None));
 
-    match run(code, &mut environment) {
+    match run(code, &environment) {
         Ok(_) => {}
         Err(errs) => {
             for err in errs {

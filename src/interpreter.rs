@@ -1,6 +1,7 @@
 use super::environment::Environment;
 use super::parser::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use super::Error;
+use std::cell::RefCell;
 
 pub struct Interpreter {
     program: Vec<Statement>,
@@ -11,7 +12,11 @@ impl Interpreter {
         Self { program }
     }
 
-    fn statement(&self, statement: &Statement, environment: &mut Environment) -> Result<(), Error> {
+    fn statement(
+        &self,
+        statement: &Statement,
+        environment: &RefCell<Environment>,
+    ) -> Result<(), Error> {
         match statement {
             Statement::Print(expr) => {
                 println!("{}", self.expression(expr, environment)?.to_string());
@@ -27,7 +32,7 @@ impl Interpreter {
                     None => Literal::Nil,
                 };
 
-                match environment.define(name, right) {
+                match environment.borrow_mut().define(name, right) {
                     Ok(_) => Ok(()),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is defined before", name),
@@ -35,10 +40,18 @@ impl Interpreter {
                     }),
                 }
             }
-            Statement::Block(declarations) => {
-                for declaration in declarations {
-                    println!("{:?}", declaration);
+            Statement::Block(statements) => {
+                let local_environment =
+                    RefCell::new(Environment::new(Some(Box::new(environment.clone()))));
+
+                for statement in statements {
+                    self.statement(statement, &local_environment)?;
                 }
+
+                environment
+                    .borrow_mut()
+                    .set_values(local_environment.borrow().get_enclosing_values().unwrap());
+
                 Ok(())
             }
         }
@@ -47,11 +60,11 @@ impl Interpreter {
     fn expression(
         &self,
         expression: &Expr,
-        environment: &mut Environment,
+        environment: &RefCell<Environment>,
     ) -> Result<Literal, Error> {
         match expression {
             Expr::Literal(line, literal) => Ok(match literal {
-                Literal::Identifier(name) => match environment.get(name) {
+                Literal::Identifier(name) => match environment.borrow().get(name) {
                     Some(value) => value.clone(),
                     None => {
                         return Err(Error::Runtime {
@@ -207,7 +220,7 @@ impl Interpreter {
                     BinaryOperator::Comma => Ok(right),
                     BinaryOperator::Equal => match &**expr_1 {
                         Expr::Literal(line, Literal::Identifier(name)) => {
-                            match environment.assign(name, right.clone()) {
+                            match environment.borrow_mut().assign(name, &right) {
                                 Ok(()) => Ok(right),
                                 Err(_) => Err(Error::Runtime {
                                     message: format!("{} is undefined", name),
@@ -225,9 +238,9 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, environment: &mut Environment) -> Result<(), Error> {
+    pub fn interpret(&self, environment: &RefCell<Environment>) -> Result<(), Error> {
         for statement in self.program.iter() {
-            match self.statement(statement, environment) {
+            match self.statement(statement, &environment) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             };

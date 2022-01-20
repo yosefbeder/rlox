@@ -1,13 +1,16 @@
-print 3 + 2;
-var x = 3;
-x = 2;
-print x;
-var y = x;
-print y;
-var z;
-print z;
-z = x = y;
-print z;
+var x = 20;
+
 {
-  print 30;
+  var x = 30;
+  print x; // 30
 }
+
+print x; // 20
+
+var y = 20;
+
+{
+  y = 30;
+}
+
+print y; // 30
