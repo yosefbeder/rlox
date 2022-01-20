@@ -168,6 +168,10 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
+    fn get_last_line(&self) -> usize {
+        self.tokens.iter().last().unwrap().line
+    }
+
     fn next(&mut self) -> Option<&Token> {
         let current_token = self.tokens.get(self.current);
         self.current += 1;
@@ -176,6 +180,24 @@ impl Parser {
 
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current)
+    }
+
+    fn consume(&mut self, token: TokenKind, message: &'static str) -> Result<(), Error> {
+        if let Some(next_token) = self.next() {
+            if next_token.kind == token {
+                Ok(())
+            } else {
+                Err(Error::Syntax {
+                    message: String::from(message),
+                    line: next_token.line,
+                })
+            }
+        } else {
+            Err(Error::Syntax {
+                message: String::from(message),
+                line: self.get_last_line(),
+            })
+        }
     }
 
     fn primary(&mut self) -> Result<Expr, Error> {
@@ -187,19 +209,8 @@ impl Parser {
             match token.kind {
                 TokenKind::LeftParen => {
                     let expression = self.expression()?;
-                    let err = Error::Syntax {
-                        message: String::from("Expected a closing parenthese"),
-                        line: expression.get_line(),
-                    };
-
-                    if let Some(token) = self.next() {
-                        match token.kind {
-                            TokenKind::RightParen => Ok(expression),
-                            _ => Err(err),
-                        }
-                    } else {
-                        Err(err)
-                    }
+                    self.consume(TokenKind::RightParen, "Expected a closing parenthese ')'")?;
+                    Ok(expression)
                 }
                 _ => Err(Error::Syntax {
                     message: String::from("Expected an expression"),
@@ -456,36 +467,20 @@ impl Parser {
     fn print_statement(&mut self) -> Result<Statement, Error> {
         self.next();
         let expression = self.expression()?;
-        let err = Error::Syntax {
-            message: String::from("Expected ';' at the end of the statement"),
-            line: expression.get_line(),
-        };
-        if let Some(token) = self.next() {
-            if token.kind == TokenKind::Semicolon {
-                Ok(Statement::Print(expression))
-            } else {
-                Err(err)
-            }
-        } else {
-            Err(err)
-        }
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected a semi-colon at the end of the statement",
+        )?;
+        Ok(Statement::Print(expression))
     }
 
     fn expression_statement(&mut self) -> Result<Statement, Error> {
         let expression = self.expression()?;
-        let err = Error::Syntax {
-            message: String::from("Expected ';' at the end of the statement"),
-            line: expression.get_line(),
-        };
-        if let Some(token) = self.next() {
-            if token.kind == TokenKind::Semicolon {
-                Ok(Statement::Expr(expression))
-            } else {
-                Err(err)
-            }
-        } else {
-            Err(err)
-        }
+        self.consume(
+            TokenKind::Semicolon,
+            "Expected a semi-colon at the end of the statement",
+        )?;
+        Ok(Statement::Expr(expression))
     }
 
     fn statement(&mut self) -> Result<Statement, Error> {
@@ -517,30 +512,30 @@ impl Parser {
             _ => return Err(name_err),
         };
 
-        let semicolon_err = Error::Syntax {
-            message: String::from("Expected ';' at the end of the statement"),
-            line,
-        };
-
         // checking whether there's an initializer or not
-        match self.next() {
+        match self.peek() {
             Some(token) => match token.kind {
                 TokenKind::Equal => {
+                    self.next();
                     let expression = self.expression()?;
-                    match self.next() {
-                        Some(token) => match token.kind {
-                            TokenKind::Semicolon => {
-                                Ok(Statement::VarDecl(line, name.clone(), Some(expression)))
-                            }
-                            _ => Err(semicolon_err),
-                        },
-                        _ => Err(semicolon_err),
-                    }
+                    self.consume(
+                        TokenKind::Semicolon,
+                        "Expected a semi-colon at the end of the statement",
+                    )?;
+                    Ok(Statement::VarDecl(line, name, Some(expression)))
                 }
-                TokenKind::Semicolon => Ok(Statement::VarDecl(line, name.clone(), None)),
-                _ => Err(semicolon_err),
+                _ => {
+                    self.consume(
+                        TokenKind::Semicolon,
+                        "Expected a semi-colon at the end of the statement",
+                    )?;
+                    Ok(Statement::VarDecl(line, name, None))
+                }
             },
-            _ => Err(semicolon_err),
+            _ => Err(Error::Syntax {
+                message: String::from("Expected a semi-colon at the end of the statement"),
+                line: self.get_last_line(),
+            }),
         }
     }
 
@@ -559,29 +554,14 @@ impl Parser {
         let mut declarations = vec![];
 
         while let Some(token) = self.peek() {
-            if token.kind == TokenKind::RightBrace {
+            if token.kind == TokenKind::RightBrace || token.kind == TokenKind::End {
                 break;
             }
             declarations.push(Box::new(self.declaration()?));
         }
 
-        if let Some(token) = self.peek() {
-            if token.kind == TokenKind::RightBrace {
-                self.next();
-                Ok(Statement::Block(declarations))
-            } else {
-                //TODO do something about that
-                Err(Error::Syntax {
-                    message: String::from("Can't happen"),
-                    line: token.line,
-                })
-            }
-        } else {
-            Err(Error::Syntax {
-                message: String::from("Unterminted block"),
-                line: self.tokens.iter().last().unwrap().line,
-            })
-        }
+        self.consume(TokenKind::RightBrace, "Unterminated block")?;
+        Ok(Statement::Block(declarations))
     }
 
     fn synchronize(&mut self) {
@@ -631,29 +611,15 @@ impl Parser {
             }
         }
 
-        if errs.len() > 1 {
+        match self.consume(TokenKind::End, "Expected the end of the file") {
+            Ok(_) => {}
+            Err(err) => errs.push(err),
+        };
+
+        if errs.len() > 0 {
             Err(errs)
         } else {
-            let err = Error::Syntax {
-                message: String::from("Expected the end of the file"),
-                line: match statements.iter().last() {
-                    Some(statement) => match statement {
-                        _ => self.tokens.iter().last().unwrap().line,
-                    },
-                    _ => 1,
-                },
-            };
-            if let Some(token) = self.next() {
-                if token.kind == TokenKind::End {
-                    Ok(statements)
-                } else {
-                    errs.push(err);
-                    Err(errs)
-                }
-            } else {
-                errs.push(err);
-                Err(errs)
-            }
+            Ok(statements)
         }
     }
 }
