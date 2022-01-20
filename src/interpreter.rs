@@ -54,6 +54,14 @@ impl Interpreter {
 
                 Ok(())
             }
+            Statement::If(condition, then_branch, else_branch) => {
+                if self.expression(condition, environment)?.is_truthy() {
+                    self.statement(then_branch, environment)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.statement(else_branch, environment)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -238,6 +246,7 @@ impl Interpreter {
         }
     }
 
+    //TODO work more on passing environment
     pub fn interpret(&self, environment: &RefCell<Environment>) -> Result<(), Error> {
         for statement in self.program.iter() {
             match self.statement(statement, &environment) {

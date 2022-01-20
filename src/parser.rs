@@ -7,10 +7,11 @@ use super::Error;
         program -> statement*
         declaration -> var-declaration | statement
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> print-statement | expression-statement | block
+        statement -> print-statement | expression-statement | block | if-statement
         block -> "{" declaration* "}"
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
+        if-statement -> "if" "(" expression ")" statement ("else" statement)?
         expression -> assignment
         assignment -> IDENTIFIER "=" assignment | comma
         comma -> equality ("," equality)*
@@ -154,6 +155,7 @@ pub enum Statement {
     Expr(Expr),
     VarDecl(usize, String, Option<Expr>),
     Block(Vec<Box<Statement>>),
+    If(Expr, Box<Statement>, Option<Box<Statement>>),
 }
 
 pub struct Parser {
@@ -636,10 +638,7 @@ impl Parser {
                 message: String::from("Expected the end of the file"),
                 line: match statements.iter().last() {
                     Some(statement) => match statement {
-                        Statement::Expr(_) => self.tokens.iter().last().unwrap().line,
-                        Statement::Print(_) => self.tokens.iter().last().unwrap().line,
-                        Statement::VarDecl(_, _, _) => self.tokens.iter().last().unwrap().line,
-                        Statement::Block(_) => self.tokens.iter().last().unwrap().line,
+                        _ => self.tokens.iter().last().unwrap().line,
                     },
                     _ => 1,
                 },
