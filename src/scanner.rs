@@ -74,7 +74,7 @@ impl Scanner {
         Self {
             code,
             current: 0,
-            line: 0,
+            line: 1,
         }
     }
 
