@@ -183,16 +183,26 @@ impl Parser {
     }
 
     fn consume(&mut self, token: TokenKind, message: &'static str) -> Result<(), Error> {
-        if let Some(next_token) = self.next() {
+        if let Some(next_token) = self.peek() {
+            let line = next_token.line;
+
             if next_token.kind == token {
+                self.next();
                 Ok(())
-            } else {
+            } else if next_token.kind == TokenKind::End {
                 Err(Error::Syntax {
                     message: String::from(message),
-                    line: next_token.line,
+                    line,
+                })
+            } else {
+                self.next();
+                Err(Error::Syntax {
+                    message: String::from(message),
+                    line,
                 })
             }
         } else {
+            self.next();
             Err(Error::Syntax {
                 message: String::from(message),
                 line: self.get_last_line(),
@@ -583,6 +593,7 @@ impl Parser {
                 TokenKind::This,
                 TokenKind::Var,
                 TokenKind::While,
+                TokenKind::End,
             ]
             .contains(&token.kind)
             {
@@ -598,16 +609,15 @@ impl Parser {
         let mut errs = vec![];
 
         while let Some(token) = self.peek() {
-            if token.kind != TokenKind::End {
-                match self.declaration() {
-                    Ok(statement) => statements.push(statement),
-                    Err(err) => {
-                        errs.push(err);
-                        self.synchronize();
-                    }
-                }
-            } else {
+            if token.kind == TokenKind::End {
                 break;
+            };
+            match self.declaration() {
+                Ok(statement) => statements.push(statement),
+                Err(err) => {
+                    errs.push(err);
+                    self.synchronize();
+                }
             }
         }
 
