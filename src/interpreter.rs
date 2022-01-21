@@ -70,7 +70,43 @@ impl Interpreter {
                 }
                 Ok(())
             }
-            Statement::For(_, _, _, _) => Ok(()),
+            Statement::For(initializer, condition, increment, body) => {
+                let local_environment =
+                    Rc::new(RefCell::new(Environment::new(Rc::clone(&environment))));
+
+                match initializer {
+                    Some(statement) => match &**statement {
+                        Statement::VarDecl(_line, _name, _expr) => {
+                            self.statement(statement, Rc::clone(&local_environment))?;
+                        }
+                        Statement::Expr(expr) => {
+                            self.expression(expr, Rc::clone(&environment))?;
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                };
+
+                match condition {
+                    Some(expr) => {
+                        while self
+                            .expression(expr, Rc::clone(&local_environment))?
+                            .is_truthy()
+                        {
+                            self.statement(body, Rc::clone(&local_environment))?;
+                            match increment {
+                                Some(expr) => {
+                                    self.expression(expr, Rc::clone(&local_environment))?;
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                    None => {}
+                }
+
+                Ok(())
+            }
         }
     }
 

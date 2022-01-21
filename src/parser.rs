@@ -597,12 +597,12 @@ impl Parser {
 
         let body = self.statement()?;
 
-        println!(
-            "{:?}",
-            Statement::For(initializer, condition, increment, Box::new(body),)
-        );
-
-        Ok(Statement::Expr(Expr::Literal(1, Literal::False)))
+        Ok(Statement::For(
+            initializer,
+            condition,
+            increment,
+            Box::new(body),
+        ))
     }
 
     fn statement(&mut self) -> Result<Statement, Error> {
