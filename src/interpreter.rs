@@ -61,6 +61,7 @@ impl Interpreter {
                 }
                 Ok(())
             }
+            Statement::While(_condition, _body) => Ok(()),
         }
     }
 

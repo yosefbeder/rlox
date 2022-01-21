@@ -157,6 +157,7 @@ pub enum Statement {
     VarDecl(usize, String, Option<Expr>),
     Block(Vec<Box<Statement>>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
+    While(Expr, Box<Statement>),
 }
 
 pub struct Parser {
@@ -511,15 +512,30 @@ impl Parser {
         Ok(Statement::If(condition, Box::new(if_branch), else_branch))
     }
 
-    fn statement(&mut self) -> Result<Statement, Error> {
-        let token = self.peek().unwrap();
+    fn while_statement(&mut self) -> Result<Statement, Error> {
+        self.consume(
+            TokenKind::LeftParen,
+            "Expected an openning parenthese after the 'while' keyword",
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenKind::RightParen,
+            "Expected a closing parenthese after the condition",
+        )?;
+        let body = self.statement()?;
 
+        Ok(Statement::While(condition, Box::new(body)))
+    }
+
+    fn statement(&mut self) -> Result<Statement, Error> {
         if self.next_if_match(TokenKind::Print) {
             Ok(self.print_statement()?)
         } else if self.next_if_match(TokenKind::LeftBrace) {
             Ok(self.block()?)
         } else if self.next_if_match(TokenKind::If) {
             Ok(self.if_statement()?)
+        } else if self.next_if_match(TokenKind::While) {
+            Ok(self.while_statement()?)
         } else {
             Ok(self.expression_statement()?)
         }
