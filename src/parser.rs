@@ -7,8 +7,9 @@ use super::Error;
         program -> statement*
         declaration -> var-declaration | statement
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> print-statement | expression-statement | block | if-statement | while-statement
+        statement -> print-statement | expression-statement | block | if-statement | while-statement | for-statement
         while-statement -> "while" "(" expression ")" statement
+        for-statement -> "for" "(" (";" | var-declaration | expression-statement) (expression? ";") expression? ")" statement
         block -> "{" declaration* "}"
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
@@ -164,6 +165,12 @@ pub enum Statement {
     Block(Vec<Box<Statement>>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
+    For(
+        Option<Box<Statement>>,
+        Option<Expr>,
+        Option<Expr>,
+        Box<Statement>,
+    ),
 }
 
 pub struct Parser {
@@ -554,6 +561,50 @@ impl Parser {
         Ok(Statement::While(condition, Box::new(body)))
     }
 
+    fn for_statement(&mut self) -> Result<Statement, Error> {
+        self.consume(
+            TokenKind::LeftParen,
+            "Expected an openning parenthese after the 'for' keyword",
+        )?;
+
+        let mut initializer = None;
+
+        if self.next_if_match(TokenKind::Var) {
+            initializer = Some(Box::new(self.var_declaration()?));
+        } else if !self.next_if_match(TokenKind::Semicolon) {
+            initializer = Some(Box::new(self.expression_statement()?));
+        }
+
+        let mut condition = None;
+
+        if !self.next_if_match(TokenKind::Semicolon) {
+            condition = Some(self.expression()?);
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected a semi-colon after the condition",
+            )?;
+        }
+
+        let mut increment = None;
+
+        if !self.next_if_match(TokenKind::RightParen) {
+            increment = Some(self.expression()?);
+            self.consume(
+                TokenKind::RightParen,
+                "Expected a closing parenthese before the body",
+            )?;
+        }
+
+        let body = self.statement()?;
+
+        println!(
+            "{:?}",
+            Statement::For(initializer, condition, increment, Box::new(body),)
+        );
+
+        Ok(Statement::Expr(Expr::Literal(1, Literal::False)))
+    }
+
     fn statement(&mut self) -> Result<Statement, Error> {
         if self.next_if_match(TokenKind::Print) {
             Ok(self.print_statement()?)
@@ -563,6 +614,8 @@ impl Parser {
             Ok(self.if_statement()?)
         } else if self.next_if_match(TokenKind::While) {
             Ok(self.while_statement()?)
+        } else if self.next_if_match(TokenKind::For) {
+            Ok(self.for_statement()?)
         } else {
             Ok(self.expression_statement()?)
         }

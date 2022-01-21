@@ -70,6 +70,7 @@ impl Interpreter {
                 }
                 Ok(())
             }
+            Statement::For(_, _, _, _) => Ok(()),
         }
     }
 
