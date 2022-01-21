@@ -61,7 +61,15 @@ impl Interpreter {
                 }
                 Ok(())
             }
-            Statement::While(_condition, _body) => Ok(()),
+            Statement::While(condition, body) => {
+                while self
+                    .expression(condition, Rc::clone(&environment))?
+                    .is_truthy()
+                {
+                    self.statement(body, Rc::clone(&environment))?;
+                }
+                Ok(())
+            }
         }
     }
 
