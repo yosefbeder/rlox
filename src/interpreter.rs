@@ -112,7 +112,32 @@ impl Interpreter {
                 }
             }
             Expr::Binary(line, operator, expr_1, expr_2) => {
+                match operator {
+                    BinaryOperator::Comma => {
+                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+                    }
+                    _ => {}
+                }
+
                 let left = self.expression(expr_1, Rc::clone(&environment))?;
+                match operator {
+                    BinaryOperator::And => {
+                        if !left.is_truthy() {
+                            return Ok(left);
+                        }
+
+                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+                    }
+                    BinaryOperator::Or => {
+                        if left.is_truthy() {
+                            return Ok(left);
+                        }
+
+                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+                    }
+                    _ => {}
+                }
+
                 let right = self.expression(expr_2, Rc::clone(&environment))?;
 
                 match operator {
@@ -233,7 +258,6 @@ impl Interpreter {
                             line: *line,
                         }),
                     },
-                    BinaryOperator::Comma => Ok(right),
                     BinaryOperator::Equal => match &**expr_1 {
                         Expr::Literal(line, Literal::Identifier(name)) => {
                             match environment.borrow_mut().assign(name, &right) {
@@ -249,7 +273,10 @@ impl Interpreter {
                             line: expr_1.get_line(),
                         }),
                     },
-                    _ => unimplemented!(),
+                    _ => Err(Error::Runtime {
+                        message: String::from("Impossible to happen"),
+                        line: 1,
+                    }),
                 }
             }
         }

@@ -1,6 +1,13 @@
 var counter = 0;
 
-while (counter < 4 and true) {
+while (counter < 4) {
   counter = counter + 1;
   print counter;
 }
+
+print counter == 3 or "yosef", true;
+print counter == 3 and "yosef";
+print nil and true;
+print nil or "true";
+print "nil" or true;
+print nil or true and true;
