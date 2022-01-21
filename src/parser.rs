@@ -178,6 +178,17 @@ impl Parser {
         current_token
     }
 
+    fn next_if_match(&mut self, token: TokenKind) -> bool {
+        if let Some(next_token) = self.peek() {
+            if next_token.kind == token {
+                self.next();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     fn peek_back(&self) -> &Token {
         &self.tokens[self.current - 1]
     }
@@ -187,29 +198,12 @@ impl Parser {
     }
 
     fn consume(&mut self, token: TokenKind, message: &'static str) -> Result<(), Error> {
-        if let Some(next_token) = self.peek() {
-            let line = next_token.line;
-
-            if next_token.kind == token {
-                self.next();
-                Ok(())
-            } else if next_token.kind == TokenKind::End {
-                Err(Error::Syntax {
-                    message: String::from(message),
-                    line,
-                })
-            } else {
-                self.next();
-                Err(Error::Syntax {
-                    message: String::from(message),
-                    line,
-                })
-            }
+        if self.next_if_match(token) {
+            Ok(())
         } else {
-            self.next();
             Err(Error::Syntax {
                 message: String::from(message),
-                line: self.get_last_line(),
+                line: self.peek_back().line,
             })
         }
     }
@@ -522,14 +516,11 @@ impl Parser {
     fn statement(&mut self) -> Result<Statement, Error> {
         let token = self.peek().unwrap();
 
-        if token.kind == TokenKind::Print {
-            self.next();
+        if self.next_if_match(TokenKind::Print) {
             Ok(self.print_statement()?)
-        } else if token.kind == TokenKind::LeftBrace {
-            self.next();
+        } else if self.next_if_match(TokenKind::LeftBrace) {
             Ok(self.block()?)
-        } else if token.kind == TokenKind::If {
-            self.next();
+        } else if self.next_if_match(TokenKind::If) {
             Ok(self.if_statement()?)
         } else {
             Ok(self.expression_statement()?)
@@ -537,8 +528,7 @@ impl Parser {
     }
 
     fn var_declaration(&mut self) -> Result<Statement, Error> {
-        let var_token = self.peek_back();
-        let line = var_token.line;
+        let line = self.peek_back().line;
 
         let name_err = Error::Syntax {
             message: String::from("Expected an identifer after the 'var' keyword"),
@@ -581,10 +571,7 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Statement, Error> {
-        let token = self.peek().unwrap();
-
-        if token.kind == TokenKind::Var {
-            self.next();
+        if self.next_if_match(TokenKind::Var) {
             Ok(self.var_declaration()?)
         } else {
             Ok(self.statement()?)
