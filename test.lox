@@ -1,6 +1,6 @@
 var counter = 0;
 
-while (counter < 4) {
+while (counter < 4 and true) {
   counter = counter + 1;
   print counter;
 }

@@ -249,6 +249,7 @@ impl Interpreter {
                             line: expr_1.get_line(),
                         }),
                     },
+                    _ => unimplemented!(),
                 }
             }
         }

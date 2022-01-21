@@ -15,7 +15,9 @@ use super::Error;
         if-statement -> "if" "(" expression ")" statement ("else" statement)?
         expression -> assignment
         assignment -> IDENTIFIER "=" assignment | comma
-        comma -> equality ("," equality)*
+        comma -> or ("," or)*
+        or -> and ("or" and)*
+        and -> equality ("and" equality)*
         equality -> comparison (("==" | "!=") comparison)*
         comparison -> term ((">" | ">=" | "<" | "<=") term)*
         term -> factor (("+" | "-") factor)*
@@ -106,6 +108,8 @@ pub enum BinaryOperator {
     Less,
     LessEqual,
     Comma,
+    And,
+    Or,
 }
 
 impl TryFrom<TokenKind> for BinaryOperator {
@@ -125,6 +129,8 @@ impl TryFrom<TokenKind> for BinaryOperator {
             TokenKind::Less => Ok(Self::Less),
             TokenKind::LessEqual => Ok(Self::LessEqual),
             TokenKind::Comma => Ok(Self::Comma),
+            TokenKind::And => Ok(Self::And),
+            TokenKind::Or => Ok(Self::Or),
             _ => Err(format!(
                 "Couldn't convert {:?} token to a binary operator",
                 token
@@ -418,8 +424,34 @@ impl Parser {
         Ok(equality)
     }
 
+    fn and(&mut self) -> Result<Expr, Error> {
+        let mut and = self.equality()?;
+
+        while self.next_if_match(TokenKind::And) {
+            let line = self.peek_back().line;
+            let equality = self.equality()?;
+
+            and = Expr::Binary(line, BinaryOperator::And, Box::new(and), Box::new(equality));
+        }
+
+        Ok(and)
+    }
+
+    fn or(&mut self) -> Result<Expr, Error> {
+        let mut or = self.and()?;
+
+        while self.next_if_match(TokenKind::Or) {
+            let line = self.peek_back().line;
+            let and = self.and()?;
+
+            or = Expr::Binary(line, BinaryOperator::Or, Box::new(or), Box::new(and));
+        }
+
+        Ok(or)
+    }
+
     fn comma(&mut self) -> Result<Expr, Error> {
-        let mut comma = self.equality()?;
+        let mut comma = self.or()?;
 
         while let Some(token) = self.peek() {
             if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
@@ -427,14 +459,9 @@ impl Parser {
                     BinaryOperator::Comma => {
                         let line = token.line;
                         self.next();
-                        let equality = self.equality()?;
+                        let or = self.or()?;
 
-                        comma = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(comma),
-                            Box::new(equality),
-                        );
+                        comma = Expr::Binary(line, binary_operator, Box::new(comma), Box::new(or));
                     }
                     _ => {
                         break;
