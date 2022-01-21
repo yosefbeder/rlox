@@ -8,6 +8,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::process;
+use std::rc::Rc;
 
 fn main() {
     let mut args = env::args();
@@ -19,7 +20,7 @@ fn main() {
     }
 }
 
-fn run(code: String, environment: &RefCell<Environment>) -> Result<(), Vec<Error>> {
+fn run(code: String, environment: Rc<RefCell<Environment>>) -> Result<(), Vec<Error>> {
     let tokens = match Scanner::new(code).scan() {
         Ok(value) => value,
         Err(err) => {
@@ -45,7 +46,9 @@ fn run(code: String, environment: &RefCell<Environment>) -> Result<(), Vec<Error
 }
 
 fn run_repl() {
-    let environment = RefCell::new(Environment::new(None));
+    let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
+        Environment::Nil,
+    )))));
 
     loop {
         let mut line = String::new();
@@ -56,7 +59,7 @@ fn run_repl() {
                     break;
                 }
 
-                match run(line, &environment) {
+                match run(line, Rc::clone(&environment)) {
                     Ok(_) => {}
                     Err(errs) => eprintln!("{}", errs[0]),
                 }
@@ -77,9 +80,11 @@ fn run_file(path: String) {
             process::exit(65);
         }
     };
-    let environment = RefCell::new(Environment::new(None));
+    let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
+        Environment::Nil,
+    )))));
 
-    match run(code, &environment) {
+    match run(code, Rc::clone(&environment)) {
         Ok(_) => {}
         Err(errs) => {
             for err in errs {

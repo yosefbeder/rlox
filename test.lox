@@ -1,4 +1,12 @@
 var x = 30;
 
+{
+  var x = 20;
+  x = 35;
+  print x;
+}
+
 if (x > 30) print "x is bigger than 30";
 else print "x is 30 or less";
+
+print x + 20;

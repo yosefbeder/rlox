@@ -1,61 +1,51 @@
 use super::parser::Literal;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-#[derive(Clone)]
-pub struct Environment {
-    enclosing: Option<Box<RefCell<Environment>>>,
-    values: HashMap<String, Literal>,
+pub enum Environment {
+    Cons(HashMap<String, Literal>, Rc<RefCell<Environment>>),
+    Nil,
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Box<RefCell<Environment>>>) -> Self {
-        Self {
-            enclosing,
-            values: HashMap::new(),
-        }
+    pub fn new(enclosing: Rc<RefCell<Environment>>) -> Self {
+        Self::Cons(HashMap::new(), enclosing)
     }
 
     pub fn get(&self, name: &str) -> Option<Literal> {
-        match self.values.get(name) {
-            Some(value) => Some(value.clone()),
-            None => match &self.enclosing {
-                Some(enclosing) => match enclosing.borrow().get(name) {
-                    Some(value) => Some(value.clone()),
-                    None => None,
-                },
-                None => None,
+        match self {
+            Self::Cons(values, enclosing) => match values.get(name) {
+                Some(value) => Some(value.clone()),
+                None => enclosing.borrow().get(name),
             },
+            Self::Nil => None,
         }
     }
 
-    pub fn define(&mut self, name: &str, value: Literal) -> Result<(), ()> {
-        match self.values.insert(String::from(name), value) {
-            Some(_) => Err(()),
-            None => Ok(()),
+    pub fn define(&mut self, name: &str, value: &Literal) -> Result<(), ()> {
+        match self {
+            Self::Cons(values, _enclosing) => {
+                match values.insert(name.to_string(), value.clone()) {
+                    Some(_) => Err(()),
+                    None => Ok(()),
+                }
+            }
+            Self::Nil => Err(()),
         }
     }
 
     pub fn assign(&mut self, name: &str, value: &Literal) -> Result<(), ()> {
-        if self.values.contains_key(name) {
-            self.values.insert(String::from(name), value.clone());
-            Ok(())
-        } else {
-            match &self.enclosing {
-                Some(enclosing) => enclosing.borrow_mut().assign(name, value),
-                None => Err(()),
+        match self {
+            Self::Cons(values, enclosing) => {
+                if values.contains_key(name) {
+                    values.insert(name.to_string(), value.clone());
+                    Ok(())
+                } else {
+                    enclosing.borrow_mut().assign(name, value)
+                }
             }
+            Self::Nil => Err(()),
         }
-    }
-
-    pub fn get_enclosing_values(&self) -> Option<HashMap<String, Literal>> {
-        match &self.enclosing {
-            Some(enclosing) => Some(enclosing.borrow().clone().values),
-            None => None,
-        }
-    }
-
-    pub fn set_values(&mut self, new_values: HashMap<String, Literal>) {
-        self.values = new_values;
     }
 }

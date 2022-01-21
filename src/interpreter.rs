@@ -2,6 +2,7 @@ use super::environment::Environment;
 use super::parser::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
 use super::Error;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct Interpreter {
     program: Vec<Statement>,
@@ -15,7 +16,7 @@ impl Interpreter {
     fn statement(
         &self,
         statement: &Statement,
-        environment: &RefCell<Environment>,
+        environment: Rc<RefCell<Environment>>,
     ) -> Result<(), Error> {
         match statement {
             Statement::Print(expr) => {
@@ -28,11 +29,11 @@ impl Interpreter {
             }
             Statement::VarDecl(line, name, initializer) => {
                 let right = match initializer {
-                    Some(expr) => self.expression(expr, environment)?,
+                    Some(expr) => self.expression(expr, Rc::clone(&environment))?,
                     None => Literal::Nil,
                 };
 
-                match environment.borrow_mut().define(name, right) {
+                match environment.borrow_mut().define(name, &right) {
                     Ok(_) => Ok(()),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is defined before", name),
@@ -41,24 +42,22 @@ impl Interpreter {
                 }
             }
             Statement::Block(statements) => {
-                let local_environment =
-                    RefCell::new(Environment::new(Some(Box::new(environment.clone()))));
+                let local_environment = Rc::new(RefCell::new(Environment::new(environment)));
 
                 for statement in statements {
-                    self.statement(statement, &local_environment)?;
+                    self.statement(statement, Rc::clone(&local_environment))?;
                 }
-
-                environment
-                    .borrow_mut()
-                    .set_values(local_environment.borrow().get_enclosing_values().unwrap());
 
                 Ok(())
             }
             Statement::If(condition, then_branch, else_branch) => {
-                if self.expression(condition, environment)?.is_truthy() {
-                    self.statement(then_branch, environment)?;
+                if self
+                    .expression(condition, Rc::clone(&environment))?
+                    .is_truthy()
+                {
+                    self.statement(then_branch, Rc::clone(&environment))?;
                 } else if let Some(else_branch) = else_branch {
-                    self.statement(else_branch, environment)?;
+                    self.statement(else_branch, Rc::clone(&environment))?;
                 }
                 Ok(())
             }
@@ -68,7 +67,7 @@ impl Interpreter {
     fn expression(
         &self,
         expression: &Expr,
-        environment: &RefCell<Environment>,
+        environment: Rc<RefCell<Environment>>,
     ) -> Result<Literal, Error> {
         match expression {
             Expr::Literal(line, literal) => Ok(match literal {
@@ -104,8 +103,8 @@ impl Interpreter {
                 }
             }
             Expr::Binary(line, operator, expr_1, expr_2) => {
-                let left = self.expression(expr_1, environment)?;
-                let right = self.expression(expr_2, environment)?;
+                let left = self.expression(expr_1, Rc::clone(&environment))?;
+                let right = self.expression(expr_2, Rc::clone(&environment))?;
 
                 match operator {
                     BinaryOperator::Plus => match (left, right) {
@@ -246,10 +245,9 @@ impl Interpreter {
         }
     }
 
-    //TODO work more on passing environment
-    pub fn interpret(&self, environment: &RefCell<Environment>) -> Result<(), Error> {
+    pub fn interpret(&self, environment: Rc<RefCell<Environment>>) -> Result<(), Error> {
         for statement in self.program.iter() {
-            match self.statement(statement, &environment) {
+            match self.statement(statement, Rc::clone(&environment)) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             };
