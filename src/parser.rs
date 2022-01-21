@@ -7,7 +7,8 @@ use super::Error;
         program -> statement*
         declaration -> var-declaration | statement
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> print-statement | expression-statement | block | if-statement
+        statement -> print-statement | expression-statement | block | if-statement | while-statement
+        while-statement -> "while" "(" expression ")" statement
         block -> "{" declaration* "}"
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
@@ -503,11 +504,8 @@ impl Parser {
         let if_branch = self.statement()?;
         let mut else_branch = None;
 
-        if let Some(token) = self.peek() {
-            if token.kind == TokenKind::Else {
-                self.next();
-                else_branch = Some(Box::new(self.statement()?));
-            }
+        if self.next_if_match(TokenKind::Else) {
+            else_branch = Some(Box::new(self.statement()?));
         }
 
         Ok(Statement::If(condition, Box::new(if_branch), else_branch))
