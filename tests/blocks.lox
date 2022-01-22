@@ -1,0 +1,19 @@
+var x = 3 * 3;
+print x; // 9
+
+{
+  x = 3;
+}
+print x; // 3
+
+{
+  var x = 30;
+  print x; // 30
+}
+print x; // 3
+
+{
+  var x = x + 3;
+  print x; // 6
+}
+print x; // 3
