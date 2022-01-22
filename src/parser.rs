@@ -148,6 +148,12 @@ impl Parser {
         let mut arguments = vec![Box::new(self.assignment()?)];
 
         while self.next_if_match(TokenKind::Comma) {
+            if arguments.len() >= 255 {
+                return Err(Error::Syntax {
+                    message: String::from("Can't have more than 255 arguments"),
+                    line: self.peek().unwrap().line,
+                });
+            }
             arguments.push(Box::new(self.assignment()?));
         }
 
