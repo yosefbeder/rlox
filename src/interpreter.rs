@@ -173,13 +173,6 @@ impl Interpreter {
                 }
             }
             Expr::Binary(operator, expression_1, expression_2) => {
-                match operator.kind {
-                    TokenKind::Comma => {
-                        return Ok(self.expression(expression_2, Rc::clone(&environment))?);
-                    }
-                    _ => {}
-                }
-
                 let left = self.expression(expression_1, Rc::clone(&environment))?;
                 match operator.kind {
                     TokenKind::And => {
@@ -351,6 +344,7 @@ impl Interpreter {
                             line: operator.line,
                         }),
                     },
+                    TokenKind::Comma => Ok(right),
                     _ => Ok(TokenKind::Nil),
                 }
             }

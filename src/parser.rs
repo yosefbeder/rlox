@@ -14,9 +14,9 @@ use super::Error;
         print-statement -> "print" expression ";"
         expression-statement -> expression ";"
         if-statement -> "if" "(" expression ")" statement ("else" statement)?
-        expression -> assignment
-        assignment -> IDENTIFIER "=" assignment | comma
-        comma -> or ("," or)*
+        expression -> comma
+        comma -> assignment ("," assignment)*
+        assignment -> IDENTIFIER "=" assignment | or
         or -> and ("or" and)*
         and -> equality ("and" equality)*
         equality -> comparison (("==" | "!=") comparison)*
@@ -283,8 +283,26 @@ impl Parser {
         Ok(or)
     }
 
+    fn assignment(&mut self) -> Result<Expr, Error> {
+        let or = self.or()?;
+
+        if let Some(token) = self.peek() {
+            if token.kind == TokenKind::Equal {
+                Ok(Expr::Binary(
+                    self.next().unwrap().clone(),
+                    Box::new(or),
+                    Box::new(self.assignment()?),
+                ))
+            } else {
+                Ok(or)
+            }
+        } else {
+            Ok(or)
+        }
+    }
+
     fn comma(&mut self) -> Result<Expr, Error> {
-        let mut comma = self.or()?;
+        let mut comma = self.assignment()?;
 
         while let Some(token) = self.peek() {
             match token.kind {
@@ -292,7 +310,7 @@ impl Parser {
                     comma = Expr::Binary(
                         self.next().unwrap().clone(),
                         Box::new(comma),
-                        Box::new(self.or()?),
+                        Box::new(self.assignment()?),
                     );
                 }
                 _ => {
@@ -304,26 +322,8 @@ impl Parser {
         Ok(comma)
     }
 
-    fn assignment(&mut self) -> Result<Expr, Error> {
-        let comma = self.comma()?;
-
-        if let Some(token) = self.peek() {
-            if token.kind == TokenKind::Equal {
-                Ok(Expr::Binary(
-                    self.next().unwrap().clone(),
-                    Box::new(comma),
-                    Box::new(self.assignment()?),
-                ))
-            } else {
-                Ok(comma)
-            }
-        } else {
-            Ok(comma)
-        }
-    }
-
     fn expression(&mut self) -> Result<Expr, Error> {
-        let assignment = self.assignment()?;
+        let assignment = self.comma()?;
 
         Ok(assignment)
     }

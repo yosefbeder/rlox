@@ -11,3 +11,7 @@ print 3 <= 3;
 print 3 == 3;
 print 3 != 3;
 print 3, 4;
+var a;
+a = 3;
+print a = 3, 4; // 4
+print a == 3; // true
