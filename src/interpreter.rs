@@ -348,6 +348,10 @@ impl Interpreter {
                     _ => Ok(TokenKind::Nil),
                 }
             }
+            Expr::FnCall(callee, arguments) => {
+                println!("callee: {:?},  arguments: {:?}", callee, arguments);
+                Ok(TokenKind::Nil)
+            }
         }
     }
 

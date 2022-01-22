@@ -23,7 +23,9 @@ use super::Error;
         comparison -> term ((">" | ">=" | "<" | "<=") term)*
         term -> factor (("+" | "-") factor)*
         factor -> unary (("*" | "/") unary)*
-        unary -> ("-" | "!") unary | primary
+        unary -> ("-" | "!") unary | call
+        call -> primary ("(" arguments? ")")*
+        arguments -> assignment ("," assignment)*
         primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | "(" expression ")"
 */
 
@@ -53,6 +55,7 @@ pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
+    FnCall(Box<Expr>, Vec<Box<Expr>>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -141,6 +144,35 @@ impl Parser {
         }
     }
 
+    fn arguments(&mut self) -> Result<Vec<Box<Expr>>, Error> {
+        let mut arguments = vec![Box::new(self.assignment()?)];
+
+        while self.next_if_match(TokenKind::Comma) {
+            arguments.push(Box::new(self.assignment()?));
+        }
+
+        Ok(arguments)
+    }
+
+    fn call(&mut self) -> Result<Expr, Error> {
+        let mut call = self.primary()?;
+
+        if self.next_if_match(TokenKind::LeftParen) {
+            if self.next_if_match(TokenKind::RightParen) {
+                Ok(Expr::FnCall(Box::new(call), vec![]))
+            } else {
+                call = Expr::FnCall(Box::new(call), self.arguments()?);
+                self.consume(
+                    TokenKind::RightParen,
+                    "Expected a closing parenthese at the end of the function call",
+                )?;
+                Ok(call)
+            }
+        } else {
+            Ok(call)
+        }
+    }
+
     fn unary(&mut self) -> Result<Expr, Error> {
         let token = self.peek().unwrap();
 
@@ -150,7 +182,7 @@ impl Parser {
                 Box::new(self.unary()?),
             ))
         } else {
-            Ok(self.primary()?)
+            Ok(self.call()?)
         }
     }
 
