@@ -51,7 +51,7 @@ pub enum TokenKind {
     End,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub line: usize,

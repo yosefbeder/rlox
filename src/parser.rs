@@ -27,134 +27,32 @@ use super::Error;
         primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | "(" expression ")"
 */
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum Literal {
-    String(String),
-    Number(f64),
-    Identifier(String),
-    True,
-    False,
-    Nil,
-}
-
-impl Literal {
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::String(value) => format!("\"{}\"", value),
-            Self::Number(value) => format!("{}", value),
-            Self::Identifier(value) => format!("{}", value),
-            Self::True => format!("true"),
-            Self::False => format!("false"),
-            Self::Nil => format!("nil"),
+impl Token {
+    fn is_literal(&self) -> bool {
+        match self.kind {
+            TokenKind::String(_)
+            | TokenKind::Number(_)
+            | TokenKind::Identifier(_)
+            | TokenKind::True
+            | TokenKind::False
+            | TokenKind::Nil => true,
+            _ => false,
         }
     }
 
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Self::False => false,
-            Self::Nil => false,
-            _ => true,
-        }
-    }
-}
-
-impl TryFrom<TokenKind> for Literal {
-    type Error = String;
-
-    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
-        match token {
-            TokenKind::String(value) => Ok(Self::String(value)),
-            TokenKind::Number(value) => Ok(Self::Number(value)),
-            TokenKind::Identifier(value) => Ok(Self::Identifier(value)),
-            TokenKind::True => Ok(Self::True),
-            TokenKind::False => Ok(Self::False),
-            TokenKind::Nil => Ok(Self::Nil),
-            _ => Err(format!("Couldn't convert {:?} token to literal", token)),
-        }
-    }
-}
-
-#[derive(PartialEq, Debug)]
-pub enum UnaryOperator {
-    Minus,
-    Bang,
-}
-
-impl TryFrom<TokenKind> for UnaryOperator {
-    type Error = String;
-
-    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
-        match token {
-            TokenKind::Bang => Ok(Self::Bang),
-            TokenKind::Minus => Ok(Self::Minus),
-            _ => Err(format!(
-                "Couldn't convert {:?} token to a unary operator",
-                token
-            )),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum BinaryOperator {
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Equal,
-    BangEqual,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    Comma,
-    And,
-    Or,
-}
-
-impl TryFrom<TokenKind> for BinaryOperator {
-    type Error = String;
-
-    fn try_from(token: TokenKind) -> Result<Self, Self::Error> {
-        match token {
-            TokenKind::Plus => Ok(Self::Plus),
-            TokenKind::Minus => Ok(Self::Minus),
-            TokenKind::Star => Ok(Self::Star),
-            TokenKind::Slash => Ok(Self::Slash),
-            TokenKind::Equal => Ok(Self::Equal),
-            TokenKind::BangEqual => Ok(Self::BangEqual),
-            TokenKind::EqualEqual => Ok(Self::EqualEqual),
-            TokenKind::Greater => Ok(Self::Greater),
-            TokenKind::GreaterEqual => Ok(Self::GreaterEqual),
-            TokenKind::Less => Ok(Self::Less),
-            TokenKind::LessEqual => Ok(Self::LessEqual),
-            TokenKind::Comma => Ok(Self::Comma),
-            TokenKind::And => Ok(Self::And),
-            TokenKind::Or => Ok(Self::Or),
-            _ => Err(format!(
-                "Couldn't convert {:?} token to a binary operator",
-                token
-            )),
+    fn is_unary_operator(&self) -> bool {
+        match self.kind {
+            TokenKind::Bang | TokenKind::Minus => true,
+            _ => false,
         }
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub enum Expr {
-    Literal(usize, Literal),
-    Unary(usize, UnaryOperator, Box<Expr>),
-    Binary(usize, BinaryOperator, Box<Expr>, Box<Expr>),
-}
-
-impl Expr {
-    pub fn get_line(&self) -> usize {
-        match self {
-            Self::Literal(line, _literal) => *line,
-            Self::Binary(line, _operator, _expr_1, _expr_2) => *line,
-            Self::Unary(line, _operator, _expr) => *line,
-        }
-    }
+    Literal(Token),
+    Unary(Token, Box<Expr>),
+    Binary(Token, Box<Expr>, Box<Expr>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -226,8 +124,8 @@ impl Parser {
     fn primary(&mut self) -> Result<Expr, Error> {
         let token = self.next().unwrap();
 
-        if let Ok(literal) = Literal::try_from(token.kind.clone()) {
-            Ok(Expr::Literal(token.line, literal))
+        if token.is_literal() {
+            Ok(Expr::Literal(token.clone()))
         } else {
             match token.kind {
                 TokenKind::LeftParen => {
@@ -246,10 +144,11 @@ impl Parser {
     fn unary(&mut self) -> Result<Expr, Error> {
         let token = self.peek().unwrap();
 
-        if let Ok(unary_operator) = UnaryOperator::try_from(token.kind.clone()) {
-            let line = token.line;
-            self.next();
-            Ok(Expr::Unary(line, unary_operator, Box::new(self.unary()?)))
+        if token.is_unary_operator() {
+            Ok(Expr::Unary(
+                self.next().unwrap().clone(),
+                Box::new(self.unary()?),
+            ))
         } else {
             Ok(self.primary()?)
         }
@@ -259,30 +158,17 @@ impl Parser {
         let mut factor = self.unary()?;
 
         while let Some(token) = self.peek() {
-            if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
-                match binary_operator {
-                    BinaryOperator::Star => {
-                        let line = token.line;
-                        self.next();
-                        let unary = self.unary()?;
-
-                        factor =
-                            Expr::Binary(line, binary_operator, Box::new(factor), Box::new(unary));
-                    }
-                    BinaryOperator::Slash => {
-                        let line = token.line;
-                        self.next();
-                        let unary = self.unary()?;
-
-                        factor =
-                            Expr::Binary(line, binary_operator, Box::new(factor), Box::new(unary));
-                    }
-                    _ => {
-                        break;
-                    }
+            match token.kind {
+                TokenKind::Star | TokenKind::Slash => {
+                    factor = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(factor),
+                        Box::new(self.unary()?),
+                    );
                 }
-            } else {
-                break;
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -293,30 +179,17 @@ impl Parser {
         let mut term = self.factor()?;
 
         while let Some(token) = self.peek() {
-            if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
-                match binary_operator {
-                    BinaryOperator::Plus => {
-                        let line = token.line;
-                        self.next();
-                        let factor = self.factor()?;
-
-                        term =
-                            Expr::Binary(line, binary_operator, Box::new(term), Box::new(factor));
-                    }
-                    BinaryOperator::Minus => {
-                        let line = token.line;
-                        self.next();
-                        let factor = self.factor()?;
-
-                        term =
-                            Expr::Binary(line, binary_operator, Box::new(term), Box::new(factor));
-                    }
-                    _ => {
-                        break;
-                    }
+            match token.kind {
+                TokenKind::Plus | TokenKind::Minus => {
+                    term = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(term),
+                        Box::new(self.factor()?),
+                    );
                 }
-            } else {
-                break;
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -327,62 +200,20 @@ impl Parser {
         let mut comparison = self.term()?;
 
         while let Some(token) = self.peek() {
-            if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
-                match binary_operator {
-                    BinaryOperator::Greater => {
-                        let line = token.line;
-                        self.next();
-                        let term = self.term()?;
-
-                        comparison = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(comparison),
-                            Box::new(term),
-                        );
-                    }
-                    BinaryOperator::GreaterEqual => {
-                        let line = token.line;
-                        self.next();
-                        let term = self.term()?;
-
-                        comparison = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(comparison),
-                            Box::new(term),
-                        );
-                    }
-                    BinaryOperator::Less => {
-                        let line = token.line;
-                        self.next();
-                        let term = self.term()?;
-
-                        comparison = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(comparison),
-                            Box::new(term),
-                        );
-                    }
-                    BinaryOperator::LessEqual => {
-                        let line = token.line;
-                        self.next();
-                        let term = self.term()?;
-
-                        comparison = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(comparison),
-                            Box::new(term),
-                        );
-                    }
-                    _ => {
-                        break;
-                    }
+            match token.kind {
+                TokenKind::Greater
+                | TokenKind::GreaterEqual
+                | TokenKind::Less
+                | TokenKind::LessEqual => {
+                    comparison = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(comparison),
+                        Box::new(self.term()?),
+                    );
                 }
-            } else {
-                break;
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -393,38 +224,17 @@ impl Parser {
         let mut equality = self.comparison()?;
 
         while let Some(token) = self.peek() {
-            if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
-                match binary_operator {
-                    BinaryOperator::BangEqual => {
-                        let line = token.line;
-                        self.next();
-                        let comparison = self.comparison()?;
-
-                        equality = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(equality),
-                            Box::new(comparison),
-                        );
-                    }
-                    BinaryOperator::EqualEqual => {
-                        let line = token.line;
-                        self.next();
-                        let comparison = self.comparison()?;
-
-                        equality = Expr::Binary(
-                            line,
-                            binary_operator,
-                            Box::new(equality),
-                            Box::new(comparison),
-                        );
-                    }
-                    _ => {
-                        break;
-                    }
+            match token.kind {
+                TokenKind::EqualEqual | TokenKind::BangEqual => {
+                    equality = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(equality),
+                        Box::new(self.comparison()?),
+                    );
                 }
-            } else {
-                break;
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -434,11 +244,19 @@ impl Parser {
     fn and(&mut self) -> Result<Expr, Error> {
         let mut and = self.equality()?;
 
-        while self.next_if_match(TokenKind::And) {
-            let line = self.peek_back().line;
-            let equality = self.equality()?;
-
-            and = Expr::Binary(line, BinaryOperator::And, Box::new(and), Box::new(equality));
+        while let Some(token) = self.peek() {
+            match token.kind {
+                TokenKind::And => {
+                    and = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(and),
+                        Box::new(self.equality()?),
+                    );
+                }
+                _ => {
+                    break;
+                }
+            }
         }
 
         Ok(and)
@@ -447,11 +265,19 @@ impl Parser {
     fn or(&mut self) -> Result<Expr, Error> {
         let mut or = self.and()?;
 
-        while self.next_if_match(TokenKind::Or) {
-            let line = self.peek_back().line;
-            let and = self.and()?;
-
-            or = Expr::Binary(line, BinaryOperator::Or, Box::new(or), Box::new(and));
+        while let Some(token) = self.peek() {
+            match token.kind {
+                TokenKind::Or => {
+                    or = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(or),
+                        Box::new(self.and()?),
+                    );
+                }
+                _ => {
+                    break;
+                }
+            }
         }
 
         Ok(or)
@@ -461,21 +287,17 @@ impl Parser {
         let mut comma = self.or()?;
 
         while let Some(token) = self.peek() {
-            if let Ok(binary_operator) = BinaryOperator::try_from(token.kind.clone()) {
-                match binary_operator {
-                    BinaryOperator::Comma => {
-                        let line = token.line;
-                        self.next();
-                        let or = self.or()?;
-
-                        comma = Expr::Binary(line, binary_operator, Box::new(comma), Box::new(or));
-                    }
-                    _ => {
-                        break;
-                    }
+            match token.kind {
+                TokenKind::Comma => {
+                    comma = Expr::Binary(
+                        self.next().unwrap().clone(),
+                        Box::new(comma),
+                        Box::new(self.or()?),
+                    );
                 }
-            } else {
-                break;
+                _ => {
+                    break;
+                }
             }
         }
 
@@ -484,15 +306,13 @@ impl Parser {
 
     fn assignment(&mut self) -> Result<Expr, Error> {
         let comma = self.comma()?;
+
         if let Some(token) = self.peek() {
-            if let TokenKind::Equal = &token.kind {
-                let line = self.next().unwrap().line;
-                let assignment = self.assignment()?;
+            if token.kind == TokenKind::Equal {
                 Ok(Expr::Binary(
-                    line,
-                    BinaryOperator::Equal,
+                    self.next().unwrap().clone(),
                     Box::new(comma),
-                    Box::new(assignment),
+                    Box::new(self.assignment()?),
                 ))
             } else {
                 Ok(comma)

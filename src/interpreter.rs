@@ -1,8 +1,31 @@
 use super::environment::Environment;
-use super::parser::{BinaryOperator, Expr, Literal, Statement, UnaryOperator};
+use super::parser::{Expr, Statement};
+use super::scanner::{Token, TokenKind};
 use super::Error;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+impl TokenKind {
+    pub fn to_string(&self) -> String {
+        match self {
+            Self::String(value) => format!("\"{}\"", value),
+            Self::Number(value) => format!("{}", value),
+            Self::Identifier(value) => format!("{}", value),
+            Self::True => String::from("true"),
+            Self::False => String::from("false"),
+            Self::Nil => String::from("nil"),
+            _ => String::new(),
+        }
+    }
+
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Self::False => false,
+            Self::Nil => false,
+            _ => true,
+        }
+    }
+}
 
 pub struct Interpreter {
     program: Vec<Statement>,
@@ -30,7 +53,7 @@ impl Interpreter {
             Statement::VarDecl(line, name, initializer) => {
                 let right = match initializer {
                     Some(expr) => self.expression(expr, Rc::clone(&environment))?,
-                    None => Literal::Nil,
+                    None => TokenKind::Nil,
                 };
 
                 match environment.borrow_mut().define(name, &right) {
@@ -114,206 +137,221 @@ impl Interpreter {
         &self,
         expression: &Expr,
         environment: Rc<RefCell<Environment>>,
-    ) -> Result<Literal, Error> {
+    ) -> Result<TokenKind, Error> {
         match expression {
-            Expr::Literal(line, literal) => Ok(match literal {
-                Literal::Identifier(name) => match environment.borrow().get(name) {
+            Expr::Literal(token) => Ok(match &token.kind {
+                TokenKind::Identifier(name) => match environment.borrow().get(&name) {
                     Some(value) => value.clone(),
                     None => {
                         return Err(Error::Runtime {
                             message: format!("{} is undefined", name),
-                            line: *line,
+                            line: token.line,
                         });
                     }
                 },
                 value => value.clone(),
             }),
-            Expr::Unary(line, operator, expr) => {
-                let right = self.expression(expr, environment)?;
+            Expr::Unary(operator, expression) => {
+                let right = self.expression(expression, environment)?;
 
-                match operator {
-                    UnaryOperator::Bang => {
+                match operator.kind {
+                    TokenKind::Bang => {
                         if right.is_truthy() {
-                            Ok(Literal::False)
+                            Ok(TokenKind::False)
                         } else {
-                            Ok(Literal::True)
+                            Ok(TokenKind::True)
                         }
                     }
-                    UnaryOperator::Minus => match right {
-                        Literal::Number(value) => Ok(Literal::Number(value * -1.0)),
+                    TokenKind::Minus => match right {
+                        TokenKind::Number(value) => Ok(TokenKind::Number(value * -1.0)),
                         _ => Err(Error::Runtime {
                             message: String::from("The negative operator works only with numbers"),
-                            line: *line,
+                            line: operator.line,
                         }),
                     },
+                    _ => Ok(TokenKind::Nil),
                 }
             }
-            Expr::Binary(line, operator, expr_1, expr_2) => {
-                match operator {
-                    BinaryOperator::Comma => {
-                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+            Expr::Binary(operator, expression_1, expression_2) => {
+                match operator.kind {
+                    TokenKind::Comma => {
+                        return Ok(self.expression(expression_2, Rc::clone(&environment))?);
                     }
                     _ => {}
                 }
 
-                let left = self.expression(expr_1, Rc::clone(&environment))?;
-                match operator {
-                    BinaryOperator::And => {
+                let left = self.expression(expression_1, Rc::clone(&environment))?;
+                match operator.kind {
+                    TokenKind::And => {
                         if !left.is_truthy() {
                             return Ok(left);
                         }
 
-                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+                        return Ok(self.expression(expression_2, Rc::clone(&environment))?);
                     }
-                    BinaryOperator::Or => {
+                    TokenKind::Or => {
                         if left.is_truthy() {
                             return Ok(left);
                         }
 
-                        return Ok(self.expression(expr_2, Rc::clone(&environment))?);
+                        return Ok(self.expression(expression_2, Rc::clone(&environment))?);
                     }
                     _ => {}
                 }
 
-                let right = self.expression(expr_2, Rc::clone(&environment))?;
+                let right = self.expression(expression_2, Rc::clone(&environment))?;
 
-                match operator {
-                    BinaryOperator::Plus => match (left, right) {
-                        (Literal::String(left), Literal::String(right)) => {
-                            Ok(Literal::String(format!("{}{}", left, right)))
+                match operator.kind {
+                    TokenKind::Plus => match (left, right) {
+                        (TokenKind::String(left), TokenKind::String(right)) => {
+                            Ok(TokenKind::String(format!("{}{}", left, right)))
                         }
-                        (Literal::Number(left), Literal::Number(right)) => {
-                            Ok(Literal::Number(left + right))
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(TokenKind::Number(left + right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from(
                                 "Both operands should be either strings or numbers",
                             ),
-                            line: *line,
+                            line: operator.line,
                         }),
                     },
-                    BinaryOperator::Minus => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => {
-                            Ok(Literal::Number(left - right))
+                    TokenKind::Minus => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(TokenKind::Number(left - right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
-                            line: *line,
+                            line: operator.line,
                         }),
                     },
-                    BinaryOperator::Star => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => {
-                            Ok(Literal::Number(left * right))
+                    TokenKind::Star => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(TokenKind::Number(left * right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
-                            line: *line,
+                            line: operator.line,
                         }),
                     },
-                    BinaryOperator::Slash => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => {
-                            Ok(Literal::Number(left / right))
+                    TokenKind::Slash => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(TokenKind::Number(left / right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
-                            line: *line,
+                            line: operator.line,
                         }),
                     },
-                    BinaryOperator::BangEqual => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left != right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        (Literal::String(left), Literal::String(right)) => Ok(if left != right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        (Literal::Nil, Literal::Nil) => Ok(Literal::False),
-                        (Literal::False, Literal::False) => Ok(Literal::False),
-                        (Literal::True, Literal::True) => Ok(Literal::False),
-                        _ => Ok(Literal::True),
-                    },
-                    BinaryOperator::EqualEqual => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left == right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        (Literal::String(left), Literal::String(right)) => Ok(if left == right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        (Literal::Nil, Literal::Nil) => Ok(Literal::True),
-                        (Literal::False, Literal::False) => Ok(Literal::True),
-                        (Literal::True, Literal::True) => Ok(Literal::True),
-                        _ => Ok(Literal::False),
-                    },
-                    BinaryOperator::Greater => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left > right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        _ => Err(Error::Runtime {
-                            message: String::from("Both operands should be numbers"),
-                            line: *line,
-                        }),
-                    },
-                    BinaryOperator::GreaterEqual => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left >= right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        _ => Err(Error::Runtime {
-                            message: String::from("Both operands should be numbers"),
-                            line: *line,
-                        }),
-                    },
-                    BinaryOperator::Less => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left < right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        _ => Err(Error::Runtime {
-                            message: String::from("Both operands should be numbers"),
-                            line: *line,
-                        }),
-                    },
-                    BinaryOperator::LessEqual => match (left, right) {
-                        (Literal::Number(left), Literal::Number(right)) => Ok(if left <= right {
-                            Literal::True
-                        } else {
-                            Literal::False
-                        }),
-                        _ => Err(Error::Runtime {
-                            message: String::from("Both operands should be numbers"),
-                            line: *line,
-                        }),
-                    },
-                    BinaryOperator::Equal => match &**expr_1 {
-                        Expr::Literal(line, Literal::Identifier(name)) => {
-                            match environment.borrow_mut().assign(name, &right) {
-                                Ok(()) => Ok(right),
-                                Err(_) => Err(Error::Runtime {
-                                    message: format!("{} is undefined", name),
-                                    line: *line,
-                                }),
-                            }
+                    TokenKind::BangEqual => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left != right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
                         }
+                        (TokenKind::String(left), TokenKind::String(right)) => {
+                            Ok(if left != right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        (TokenKind::Nil, TokenKind::Nil) => Ok(TokenKind::False),
+                        (TokenKind::False, TokenKind::False) => Ok(TokenKind::False),
+                        (TokenKind::True, TokenKind::True) => Ok(TokenKind::False),
+                        _ => Ok(TokenKind::True),
+                    },
+                    TokenKind::EqualEqual => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left == right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        (TokenKind::String(left), TokenKind::String(right)) => {
+                            Ok(if left == right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        (TokenKind::Nil, TokenKind::Nil) => Ok(TokenKind::True),
+                        (TokenKind::False, TokenKind::False) => Ok(TokenKind::True),
+                        (TokenKind::True, TokenKind::True) => Ok(TokenKind::True),
+                        _ => Ok(TokenKind::False),
+                    },
+                    TokenKind::Greater => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left > right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: operator.line,
+                        }),
+                    },
+                    TokenKind::GreaterEqual => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left >= right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: operator.line,
+                        }),
+                    },
+                    TokenKind::Less => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left < right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: operator.line,
+                        }),
+                    },
+                    TokenKind::LessEqual => match (left, right) {
+                        (TokenKind::Number(left), TokenKind::Number(right)) => {
+                            Ok(if left <= right {
+                                TokenKind::True
+                            } else {
+                                TokenKind::False
+                            })
+                        }
+                        _ => Err(Error::Runtime {
+                            message: String::from("Both operands should be numbers"),
+                            line: operator.line,
+                        }),
+                    },
+                    TokenKind::Equal => match &**expression_1 {
+                        Expr::Literal(Token {
+                            kind: TokenKind::Identifier(name),
+                            line,
+                        }) => match environment.borrow_mut().assign(name, &right) {
+                            Ok(()) => Ok(right),
+                            Err(_) => Err(Error::Runtime {
+                                message: format!("{} is undefined", name),
+                                line: *line,
+                            }),
+                        },
                         _ => Err(Error::Runtime {
                             message: String::from("Bad assignment target"),
-                            line: expr_1.get_line(),
+                            line: operator.line,
                         }),
                     },
-                    _ => Err(Error::Runtime {
-                        message: String::from("Impossible to happen"),
-                        line: 1,
-                    }),
+                    _ => Ok(TokenKind::Nil),
                 }
             }
         }

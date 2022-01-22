@@ -1,10 +1,10 @@
-use super::parser::Literal;
+use super::scanner::TokenKind;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 pub enum Environment {
-    Cons(HashMap<String, Literal>, Rc<RefCell<Environment>>),
+    Cons(HashMap<String, TokenKind>, Rc<RefCell<Environment>>),
     Nil,
 }
 
@@ -13,7 +13,7 @@ impl Environment {
         Self::Cons(HashMap::new(), enclosing)
     }
 
-    pub fn get(&self, name: &str) -> Option<Literal> {
+    pub fn get(&self, name: &str) -> Option<TokenKind> {
         match self {
             Self::Cons(values, enclosing) => match values.get(name) {
                 Some(value) => Some(value.clone()),
@@ -23,7 +23,7 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: &str, value: &Literal) -> Result<(), ()> {
+    pub fn define(&mut self, name: &str, value: &TokenKind) -> Result<(), ()> {
         match self {
             Self::Cons(values, _enclosing) => {
                 match values.insert(name.to_string(), value.clone()) {
@@ -35,7 +35,7 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, name: &str, value: &Literal) -> Result<(), ()> {
+    pub fn assign(&mut self, name: &str, value: &TokenKind) -> Result<(), ()> {
         match self {
             Self::Cons(values, enclosing) => {
                 if values.contains_key(name) {
