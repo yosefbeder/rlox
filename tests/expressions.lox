@@ -16,4 +16,4 @@ a = 3;
 print a = 3, 4; // 4
 print a == 3; // true
 print a();
-print a(4 + 2, y, !"yosef");
+print a(4 + 2, a, !"yosef");

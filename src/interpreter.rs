@@ -349,7 +349,19 @@ impl Interpreter {
                 }
             }
             Expr::FnCall(callee, arguments) => {
-                println!("callee: {:?},  arguments: {:?}", callee, arguments);
+                let _interpreted_callee = self.expression(callee, Rc::clone(&environment))?;
+                let mut interpreted_arguments = vec![];
+
+                for result in arguments
+                    .iter()
+                    .map(|argument| self.expression(argument, Rc::clone(&environment)))
+                {
+                    match result {
+                        Ok(argument) => interpreted_arguments.push(argument),
+                        Err(err) => return Err(err),
+                    }
+                }
+
                 Ok(TokenKind::Nil)
             }
         }
