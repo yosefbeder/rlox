@@ -86,14 +86,14 @@ impl Parser {
     }
 
     fn next(&mut self) -> Option<&Token> {
-        let current_token = self.tokens.get(self.current);
+        let token = self.tokens.get(self.current);
         self.current += 1;
-        current_token
+        token
     }
 
-    fn next_if_match(&mut self, token: TokenKind) -> bool {
-        if let Some(next_token) = self.peek() {
-            if next_token.kind == token {
+    fn next_if_match(&mut self, token_kind: TokenKind) -> bool {
+        if let Some(token) = self.peek() {
+            if token.kind == token_kind {
                 self.next();
                 return true;
             }
@@ -110,8 +110,8 @@ impl Parser {
         self.tokens.get(self.current)
     }
 
-    fn consume(&mut self, token: TokenKind, message: &'static str) -> Result<(), Error> {
-        if self.next_if_match(token) {
+    fn consume(&mut self, token_kind: TokenKind, message: &'static str) -> Result<(), Error> {
+        if self.next_if_match(token_kind) {
             Ok(())
         } else {
             Err(Error::Syntax {
