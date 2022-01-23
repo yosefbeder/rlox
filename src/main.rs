@@ -1,14 +1,67 @@
 use rlox::environment::Environment;
+use rlox::error::{Error, ErrorReporter};
 use rlox::interpreter::Interpreter;
 use rlox::parser::Parser;
 use rlox::scanner::Scanner;
-use rlox::Error;
 use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::io;
 use std::process;
 use std::rc::Rc;
+
+struct REPLErrorReporter {
+    errors_count: usize,
+}
+
+impl REPLErrorReporter {
+    fn new() -> Self {
+        Self { errors_count: 0 }
+    }
+
+    fn reset(&mut self) {
+        self.errors_count = 0;
+    }
+}
+
+impl ErrorReporter for REPLErrorReporter {
+    fn report(&mut self, error: Error) {
+        self.errors_count += 1;
+        match error {
+            Error::Syntax { message, line: _ } => {
+                eprintln!("[SyntaxError]: {}", message)
+            }
+            Error::Runtime { message, line: _ } => {
+                eprintln!("[RuntimeError]: {}", message)
+            }
+        }
+    }
+
+    fn has_error(&self) -> bool {
+        self.errors_count > 0
+    }
+}
+
+struct FileErrorReporter {
+    errors_count: usize,
+}
+
+impl FileErrorReporter {
+    fn new() -> Self {
+        Self { errors_count: 0 }
+    }
+}
+
+impl ErrorReporter for FileErrorReporter {
+    fn report(&mut self, error: Error) {
+        self.errors_count += 1;
+        eprintln!("{}", error);
+    }
+
+    fn has_error(&self) -> bool {
+        self.errors_count > 0
+    }
+}
 
 fn main() {
     let mut args = env::args();
@@ -20,49 +73,39 @@ fn main() {
     }
 }
 
-fn run(code: String, environment: Rc<RefCell<Environment>>) -> Result<(), Vec<Error>> {
-    let tokens = match Scanner::new(code).scan() {
-        Ok(value) => value,
-        Err(err) => {
-            return Err(vec![err]);
-        }
-    };
+fn run<'a, 'b, T: ErrorReporter>(
+    code: &'a str,
+    environment: Rc<RefCell<Environment>>,
+    error_reporter: &'b mut T,
+) {
+    let tokens = Scanner::new(&code, error_reporter).scan();
+    if error_reporter.has_error() {
+        return;
+    }
 
-    let ast = match Parser::new(tokens).parse() {
-        Ok(value) => value,
-        Err(errs) => {
-            return Err(errs);
-        }
-    };
+    let ast = Parser::new(&tokens, error_reporter).parse();
+    if error_reporter.has_error() {
+        return;
+    }
 
-    match Interpreter::new(ast).interpret(environment) {
-        Ok(()) => {}
-        Err(err) => {
-            return Err(vec![err]);
-        }
-    };
-
-    Ok(())
+    Interpreter::new(&ast, error_reporter).interpret(environment);
 }
 
 fn run_repl() {
     let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
         Environment::Nil,
     )))));
+    let mut error_reporter = REPLErrorReporter::new();
 
     loop {
         let mut line = String::new();
-
         match io::stdin().read_line(&mut line) {
             Ok(_) => {
                 if line.trim().len() == 0 {
                     break;
                 }
-
-                match run(line, Rc::clone(&environment)) {
-                    Ok(_) => {}
-                    Err(errs) => eprintln!("{}", errs[0]),
-                }
+                run(&line, Rc::clone(&environment), &mut error_reporter);
+                error_reporter.reset();
             }
             Err(err) => {
                 eprintln!("{:?}", err);
@@ -83,14 +126,7 @@ fn run_file(path: String) {
     let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
         Environment::Nil,
     )))));
+    let mut error_reporter = FileErrorReporter::new();
 
-    match run(code, Rc::clone(&environment)) {
-        Ok(_) => {}
-        Err(errs) => {
-            for err in errs {
-                eprintln!("{}", err);
-            }
-            process::exit(65);
-        }
-    };
+    run(&code, Rc::clone(&environment), &mut error_reporter);
 }

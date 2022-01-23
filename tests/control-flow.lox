@@ -40,4 +40,5 @@ print true and true; // true
 print false and true; // false
 print false or "yosef"; // "yosef"
 print "yes" or "no"; // "yes"
+print x = y = 3;
 print "yes" and "no"; // "no"

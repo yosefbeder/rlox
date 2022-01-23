@@ -1,7 +1,7 @@
 use super::environment::Environment;
+use super::error::{Error, ErrorReporter};
 use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
-use super::Error;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -27,13 +27,17 @@ impl TokenKind {
     }
 }
 
-pub struct Interpreter {
-    program: Vec<Statement>,
+pub struct Interpreter<'a, 'b, T: ErrorReporter> {
+    program: &'a [Statement],
+    error_reporter: &'b mut T,
 }
 
-impl Interpreter {
-    pub fn new(program: Vec<Statement>) -> Self {
-        Self { program }
+impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
+    pub fn new(program: &'a [Statement], error_reporter: &'b mut T) -> Self {
+        Self {
+            program,
+            error_reporter,
+        }
     }
 
     fn statement(
@@ -367,13 +371,15 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, environment: Rc<RefCell<Environment>>) -> Result<(), Error> {
+    pub fn interpret(&mut self, environment: Rc<RefCell<Environment>>) {
         for statement in self.program.iter() {
             match self.statement(statement, Rc::clone(&environment)) {
                 Ok(()) => {}
-                Err(err) => return Err(err),
+                Err(error) => {
+                    self.error_reporter.report(error);
+                    return;
+                }
             };
         }
-        Ok(())
     }
 }

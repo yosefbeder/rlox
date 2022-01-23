@@ -1,6 +1,7 @@
+use super::error::Error;
 use super::scanner::Token;
 use super::scanner::TokenKind;
-use super::Error;
+use crate::error::ErrorReporter;
 
 /*
     GRAMMAR
@@ -74,14 +75,19 @@ pub enum Statement {
     ),
 }
 
-pub struct Parser {
-    tokens: Vec<Token>,
+pub struct Parser<'a, 'b, T: ErrorReporter> {
+    tokens: &'a [Token],
+    error_reporter: &'b mut T,
     current: usize,
 }
 
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, current: 0 }
+impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
+    pub fn new(tokens: &'a [Token], error_reporter: &'b mut T) -> Self {
+        Self {
+            tokens,
+            error_reporter,
+            current: 0,
+        }
     }
 
     fn get_last_line(&self) -> usize {
@@ -149,7 +155,7 @@ impl Parser {
 
         while self.next_if_match(TokenKind::Comma) {
             if arguments.len() >= 255 {
-                return Err(Error::Syntax {
+                self.error_reporter.report(Error::Syntax {
                     message: String::from("Can't have more than 255 arguments"),
                     line: self.peek().unwrap().line,
                 });
@@ -326,6 +332,21 @@ impl Parser {
 
         if let Some(token) = self.peek() {
             if token.kind == TokenKind::Equal {
+                let line = token.line;
+
+                match or {
+                    Expr::Literal(Token {
+                        kind: TokenKind::Identifier(_),
+                        line: _,
+                    }) => {}
+                    _ => {
+                        self.error_reporter.report(Error::Syntax {
+                            message: String::from("Bad assingment taget"),
+                            line: line,
+                        });
+                    }
+                };
+
                 Ok(Expr::Binary(
                     self.next().unwrap().clone(),
                     Box::new(or),
@@ -574,9 +595,8 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Statement>, Vec<Error>> {
+    pub fn parse(&mut self) -> Vec<Statement> {
         let mut statements = vec![];
-        let mut errs = vec![];
 
         while let Some(token) = self.peek() {
             if token.kind == TokenKind::End {
@@ -585,7 +605,7 @@ impl Parser {
             match self.declaration() {
                 Ok(statement) => statements.push(statement),
                 Err(err) => {
-                    errs.push(err);
+                    self.error_reporter.report(err);
                     self.synchronize();
                 }
             }
@@ -593,13 +613,9 @@ impl Parser {
 
         match self.consume(TokenKind::End, "Expected the end of the file") {
             Ok(_) => {}
-            Err(err) => errs.push(err),
+            Err(err) => self.error_reporter.report(err),
         };
 
-        if errs.len() > 0 {
-            Err(errs)
-        } else {
-            Ok(statements)
-        }
+        statements
     }
 }

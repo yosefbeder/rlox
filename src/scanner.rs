@@ -1,4 +1,4 @@
-use super::Error;
+use super::error::{Error, ErrorReporter};
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -63,16 +63,18 @@ impl Token {
     }
 }
 
-pub struct Scanner {
-    code: String,
+pub struct Scanner<'a, 'b, T: ErrorReporter> {
+    code: &'a str,
+    error_reporter: &'b mut T,
     current: usize,
     line: usize,
 }
 
-impl Scanner {
-    pub fn new(code: String) -> Self {
+impl<'a, 'b, T: ErrorReporter> Scanner<'a, 'b, T> {
+    pub fn new(code: &'a str, error_reporter: &'b mut T) -> Self {
         Self {
             code,
+            error_reporter,
             current: 0,
             line: 1,
         }
@@ -88,7 +90,7 @@ impl Scanner {
         self.code.chars().nth(self.current)
     }
 
-    pub fn scan(&mut self) -> Result<Vec<Token>, Error> {
+    pub fn scan(&mut self) -> Vec<Token> {
         let keywords_map = HashMap::from([
             (String::from("and"), TokenKind::And),
             (String::from("class"), TokenKind::Class),
@@ -197,10 +199,11 @@ impl Scanner {
                             }
                             continue;
                         } else {
-                            return Err(Error::Syntax {
+                            self.error_reporter.report(Error::Syntax {
                                 message: String::from("Unterminated multi-line comment"),
                                 line: self.line,
                             });
+                            break;
                         }
                     }
                     continue;
@@ -276,10 +279,11 @@ impl Scanner {
                             continue;
                         }
                         None => {
-                            return Err(Error::Syntax {
+                            self.error_reporter.report(Error::Syntax {
                                 message: String::from("Unterminated string"),
                                 line: self.line,
                             });
+                            break;
                         }
                     }
                 }
@@ -367,14 +371,15 @@ impl Scanner {
                 continue;
             }
 
-            return Err(Error::Syntax {
+            self.error_reporter.report(Error::Syntax {
                 message: format!("Unexpected character {}", ch),
                 line: self.line,
             });
+            break;
         }
 
         tokens.push(Token::new(TokenKind::End, self.line));
 
-        Ok(tokens)
+        tokens
     }
 }
