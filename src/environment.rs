@@ -42,7 +42,7 @@ pub enum DataType {
 impl DataType {
     pub fn to_string(&self) -> String {
         match self {
-            Self::String(value) => format!("\"{}\"", value),
+            Self::String(value) => format!("{}", value),
             Self::Number(value) => format!("{}", value),
             Self::Identifier(value) => format!("{}", value),
             Self::True => String::from("true"),
