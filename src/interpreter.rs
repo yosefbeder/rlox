@@ -1,31 +1,10 @@
+use super::environment::DataType;
 use super::environment::Environment;
 use super::error::{Error, ErrorReporter};
 use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
 use std::cell::RefCell;
 use std::rc::Rc;
-
-impl TokenKind {
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::String(value) => format!("\"{}\"", value),
-            Self::Number(value) => format!("{}", value),
-            Self::Identifier(value) => format!("{}", value),
-            Self::True => String::from("true"),
-            Self::False => String::from("false"),
-            Self::Nil => String::from("nil"),
-            _ => String::new(),
-        }
-    }
-
-    pub fn is_truthy(&self) -> bool {
-        match self {
-            Self::False => false,
-            Self::Nil => false,
-            _ => true,
-        }
-    }
-}
 
 pub struct Interpreter<'a, 'b, T: ErrorReporter> {
     program: &'a [Statement],
@@ -57,7 +36,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
             Statement::VarDecl(line, name, initializer) => {
                 let right = match initializer {
                     Some(expr) => self.expression(expr, Rc::clone(&environment))?,
-                    None => TokenKind::Nil,
+                    None => DataType::Nil,
                 };
 
                 match environment.borrow_mut().define(name, &right) {
@@ -141,11 +120,11 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
         &self,
         expression: &Expr,
         environment: Rc<RefCell<Environment>>,
-    ) -> Result<TokenKind, Error> {
+    ) -> Result<DataType, Error> {
         match expression {
             Expr::Literal(token) => Ok(match &token.kind {
                 TokenKind::Identifier(name) => match environment.borrow().get(&name) {
-                    Some(value) => value.clone(),
+                    Some(value) => value,
                     None => {
                         return Err(Error::Runtime {
                             message: format!("{} is undefined", name),
@@ -153,7 +132,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         });
                     }
                 },
-                value => value.clone(),
+                value => DataType::try_from(value.clone()).unwrap(),
             }),
             Expr::Unary(operator, expression) => {
                 let right = self.expression(expression, environment)?;
@@ -161,19 +140,19 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 match operator.kind {
                     TokenKind::Bang => {
                         if right.is_truthy() {
-                            Ok(TokenKind::False)
+                            Ok(DataType::False)
                         } else {
-                            Ok(TokenKind::True)
+                            Ok(DataType::True)
                         }
                     }
                     TokenKind::Minus => match right {
-                        TokenKind::Number(value) => Ok(TokenKind::Number(value * -1.0)),
+                        DataType::Number(value) => Ok(DataType::Number(value * -1.0)),
                         _ => Err(Error::Runtime {
                             message: String::from("The negative operator works only with numbers"),
                             line: operator.line,
                         }),
                     },
-                    _ => Ok(TokenKind::Nil),
+                    _ => Ok(DataType::Nil),
                 }
             }
             Expr::Binary(operator, expression_1, expression_2) => {
@@ -200,11 +179,11 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
 
                 match operator.kind {
                     TokenKind::Plus => match (left, right) {
-                        (TokenKind::String(left), TokenKind::String(right)) => {
-                            Ok(TokenKind::String(format!("{}{}", left, right)))
+                        (DataType::String(left), DataType::String(right)) => {
+                            Ok(DataType::String(format!("{}{}", left, right)))
                         }
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(TokenKind::Number(left + right))
+                        (DataType::Number(left), DataType::Number(right)) => {
+                            Ok(DataType::Number(left + right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from(
@@ -214,8 +193,8 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         }),
                     },
                     TokenKind::Minus => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(TokenKind::Number(left - right))
+                        (DataType::Number(left), DataType::Number(right)) => {
+                            Ok(DataType::Number(left - right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
@@ -223,8 +202,8 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         }),
                     },
                     TokenKind::Star => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(TokenKind::Number(left * right))
+                        (DataType::Number(left), DataType::Number(right)) => {
+                            Ok(DataType::Number(left * right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
@@ -232,8 +211,8 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         }),
                     },
                     TokenKind::Slash => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(TokenKind::Number(left / right))
+                        (DataType::Number(left), DataType::Number(right)) => {
+                            Ok(DataType::Number(left / right))
                         }
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
@@ -241,92 +220,76 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         }),
                     },
                     TokenKind::BangEqual => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left != right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
-                        (TokenKind::String(left), TokenKind::String(right)) => {
-                            Ok(if left != right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
-                        (TokenKind::Nil, TokenKind::Nil) => Ok(TokenKind::False),
-                        (TokenKind::False, TokenKind::False) => Ok(TokenKind::False),
-                        (TokenKind::True, TokenKind::True) => Ok(TokenKind::False),
-                        _ => Ok(TokenKind::True),
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left != right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
+                        (DataType::String(left), DataType::String(right)) => Ok(if left != right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
+                        (DataType::Nil, DataType::Nil) => Ok(DataType::False),
+                        (DataType::False, DataType::False) => Ok(DataType::False),
+                        (DataType::True, DataType::True) => Ok(DataType::False),
+                        _ => Ok(DataType::True),
                     },
                     TokenKind::EqualEqual => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left == right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
-                        (TokenKind::String(left), TokenKind::String(right)) => {
-                            Ok(if left == right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
-                        (TokenKind::Nil, TokenKind::Nil) => Ok(TokenKind::True),
-                        (TokenKind::False, TokenKind::False) => Ok(TokenKind::True),
-                        (TokenKind::True, TokenKind::True) => Ok(TokenKind::True),
-                        _ => Ok(TokenKind::False),
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left == right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
+                        (DataType::String(left), DataType::String(right)) => Ok(if left == right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
+                        (DataType::Nil, DataType::Nil) => Ok(DataType::True),
+                        (DataType::False, DataType::False) => Ok(DataType::True),
+                        (DataType::True, DataType::True) => Ok(DataType::True),
+                        _ => Ok(DataType::False),
                     },
                     TokenKind::Greater => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left > right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left > right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
                             line: operator.line,
                         }),
                     },
                     TokenKind::GreaterEqual => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left >= right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left >= right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
                             line: operator.line,
                         }),
                     },
                     TokenKind::Less => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left < right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left < right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
                             line: operator.line,
                         }),
                     },
                     TokenKind::LessEqual => match (left, right) {
-                        (TokenKind::Number(left), TokenKind::Number(right)) => {
-                            Ok(if left <= right {
-                                TokenKind::True
-                            } else {
-                                TokenKind::False
-                            })
-                        }
+                        (DataType::Number(left), DataType::Number(right)) => Ok(if left <= right {
+                            DataType::True
+                        } else {
+                            DataType::False
+                        }),
                         _ => Err(Error::Runtime {
                             message: String::from("Both operands should be numbers"),
                             line: operator.line,
@@ -349,7 +312,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         }),
                     },
                     TokenKind::Comma => Ok(right),
-                    _ => Ok(TokenKind::Nil),
+                    _ => Ok(DataType::Nil),
                 }
             }
             Expr::FnCall(callee, arguments) => {
@@ -366,7 +329,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     }
                 }
 
-                Ok(TokenKind::Nil)
+                Ok(DataType::Nil)
             }
         }
     }
