@@ -1,10 +1,20 @@
-use super::environment::DataType;
-use super::environment::Environment;
+use super::environment::{DataType, Environment};
 use super::error::{Error, ErrorReporter};
 use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+impl Expr {
+    fn get_line(&self) -> usize {
+        match self {
+            Expr::Literal(token) => token.line,
+            Expr::Unary(operator, _expression) => operator.line,
+            Expr::Binary(operator, _expression_1, _expression_2) => operator.line,
+            Expr::FnCall(callee, _arguments) => callee.get_line(),
+        }
+    }
+}
 
 pub struct Interpreter<'a, 'b, T: ErrorReporter> {
     program: &'a [Statement],
@@ -316,7 +326,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 }
             }
             Expr::FnCall(callee, arguments) => {
-                let _interpreted_callee = self.expression(callee, Rc::clone(&environment))?;
+                let interpreted_callee = self.expression(callee, Rc::clone(&environment))?;
                 let mut interpreted_arguments = vec![];
 
                 for result in arguments
@@ -326,6 +336,18 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     match result {
                         Ok(argument) => interpreted_arguments.push(argument),
                         Err(err) => return Err(err),
+                    }
+                }
+
+                match interpreted_callee {
+                    DataType::Fun(callable) => {
+                        callable.call(interpreted_arguments);
+                    }
+                    _ => {
+                        return Err(Error::Runtime {
+                            message: String::from("Callee didn't evaluate to a function"),
+                            line: callee.get_line(),
+                        });
                     }
                 }
 

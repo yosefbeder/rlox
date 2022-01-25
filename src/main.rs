@@ -95,6 +95,7 @@ fn run_repl() {
     let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
         Environment::Nil,
     )))));
+    environment.borrow_mut().init_globals();
     let mut error_reporter = REPLErrorReporter::new();
 
     loop {
@@ -126,6 +127,7 @@ fn run_file(path: String) {
     let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
         Environment::Nil,
     )))));
+    environment.borrow_mut().init_globals();
     let mut error_reporter = FileErrorReporter::new();
 
     run(&code, Rc::clone(&environment), &mut error_reporter);

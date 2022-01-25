@@ -1,44 +1,44 @@
-print "BRANCHING CONTROL FLOW";
-print "---";
+print("BRANCHING CONTROL FLOW");
+print("---");
 var x = 20;
 
 if (x > 30) {
-  print "x is bigger than 30";
+  print("x is bigger than 30");
 } else {
-  print "x is less than 30";
+  print("x is less than 30");
 }
 
 x = nil;
-if (!x) print "x is falsy";
+if (!x) print("x is falsy");
 
-print "";
-print "LOOPINGS CONTROL FLOW";
-print "---";
+print("");
+print("LOOPINGS CONTROL FLOW");
+print("---");
 var count = 3;
 
 while (count > 0) {
-  print count;
+  print(count);
   count = count -1;
 }
 
-for (;;) print x;
+for (;;) print(x);
 for (var i = 0;;) {
-  print i;
+  print(i);
 }
 for (var i = 0; i < 5; i = i + 1) {
-  print i;
+  print(i);
 }
 for (var i = 0; i < 5;) {
-  print i;
+  print(i);
   i = i + 1;
 }
 
-print "";
-print "LOGICAL OPERATORS & SHORT CIRCUTING;";
-print "---";
-print true and true; // true
-print false and true; // false
-print false or "yosef"; // "yosef"
-print "yes" or "no"; // "yes"
-print x = y = 3;
-print "yes" and "no"; // "no"
+print("");
+print("LOGICAL OPERATORS & SHORT CIRCUTING;");
+print("---");
+print(true and true); // true
+print(false and true); // false
+print(false or "yosef"); // "yosef"
+print("yes" or "no"); // "yes"
+print(x = y = 3);
+print("yes" and "no"); // "no"

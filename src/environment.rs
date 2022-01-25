@@ -9,7 +9,7 @@ pub trait CallableClone {
 
 pub trait Callable: CallableClone {
     fn arty(&self) -> usize;
-    fn call(&self);
+    fn call(&self, arguments: Vec<DataType>);
 }
 
 impl<T> CallableClone for T
@@ -76,6 +76,26 @@ impl TryFrom<TokenKind> for DataType {
     }
 }
 
+#[derive(Clone)]
+pub struct PrintFun {}
+
+impl Callable for PrintFun {
+    fn arty(&self) -> usize {
+        1
+    }
+    fn call(&self, arguments: Vec<DataType>) {
+        for argument in arguments {
+            println!("{}", argument.to_string())
+        }
+    }
+}
+
+impl PrintFun {
+    pub fn new() -> DataType {
+        DataType::Fun(Box::new(PrintFun {}))
+    }
+}
+
 pub enum Environment {
     Cons(HashMap<String, DataType>, Rc<RefCell<Environment>>),
     Nil,
@@ -84,6 +104,10 @@ pub enum Environment {
 impl Environment {
     pub fn new(enclosing: Rc<RefCell<Environment>>) -> Self {
         Self::Cons(HashMap::new(), enclosing)
+    }
+
+    pub fn init_globals(&mut self) {
+        self.define("print", &PrintFun::new()).unwrap();
     }
 
     pub fn get(&self, name: &str) -> Option<DataType> {

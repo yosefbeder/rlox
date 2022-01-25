@@ -8,11 +8,10 @@ use crate::error::ErrorReporter;
         program -> statement*
         declaration -> var-declaration | statement
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> print-statement | expression-statement | block | if-statement | while-statement | for-statement
+        statement -> expression-statement | block | if-statement | while-statement | for-statement
         while-statement -> "while" "(" expression ")" statement
         for-statement -> "for" "(" (";" | var-declaration | expression-statement) (expression? ";") expression? ")" statement
         block -> "{" declaration* "}"
-        print-statement -> "print" expression ";"
         expression-statement -> expression ";"
         if-statement -> "if" "(" expression ")" statement ("else" statement)?
         expression -> comma
@@ -387,15 +386,6 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         Ok(assignment)
     }
 
-    fn print_statement(&mut self) -> Result<Statement, Error> {
-        let expression = self.expression()?;
-        self.consume(
-            TokenKind::Semicolon,
-            "Expected a semi-colon at the end of the statement",
-        )?;
-        Ok(Statement::Print(expression))
-    }
-
     fn expression_statement(&mut self) -> Result<Statement, Error> {
         let expression = self.expression()?;
         self.consume(
@@ -485,9 +475,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
     }
 
     fn statement(&mut self) -> Result<Statement, Error> {
-        if self.next_if_match(TokenKind::Print) {
-            Ok(self.print_statement()?)
-        } else if self.next_if_match(TokenKind::LeftBrace) {
+        if self.next_if_match(TokenKind::LeftBrace) {
             Ok(self.block()?)
         } else if self.next_if_match(TokenKind::If) {
             Ok(self.if_statement()?)
@@ -578,7 +566,6 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
                 TokenKind::Fun,
                 TokenKind::For,
                 TokenKind::If,
-                TokenKind::Print,
                 TokenKind::Return,
                 TokenKind::Super,
                 TokenKind::This,
