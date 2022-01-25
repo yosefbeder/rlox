@@ -341,7 +341,23 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
 
                 match interpreted_callee {
                     DataType::Fun(callable) => {
-                        callable.call(interpreted_arguments);
+                        let arty = callable.arty();
+                        let arguments_count = interpreted_arguments.len();
+
+                        if arty == arguments_count {
+                            callable.call(interpreted_arguments);
+                        } else {
+                            return Err(Error::Runtime {
+                                message: format!(
+                                    "Expected {} argument{} but got {} argument{}",
+                                    arty,
+                                    if arty != 1 { "s" } else { "" },
+                                    arguments_count,
+                                    if arguments_count != 1 { "s" } else { "" }
+                                ),
+                                line: callee.get_line(),
+                            });
+                        }
                     }
                     _ => {
                         return Err(Error::Runtime {
