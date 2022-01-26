@@ -1,0 +1,18 @@
+fun println(string) {
+  print(string);
+}
+
+// fun sum(n1, n2) {
+//   print(n1, n2);
+// }
+
+fun mutate(n) {
+  n = n + 1;
+}
+
+var x = 3;
+
+println(x);
+sum(2, 3);
+mutate(x);
+print(x); // shouldn't get mutated because primitives gets copied

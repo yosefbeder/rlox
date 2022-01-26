@@ -6,7 +6,10 @@ use crate::error::ErrorReporter;
 /*
     GRAMMAR
         program -> statement*
-        declaration -> var-declaration | statement
+        declaration -> var-declaration | fun-declaration | statement
+        fun-declaration -> "fun" function
+        function -> "(" parameters* ")" block
+        paramters -> IDENTIFIER ("," IDENTIFIER)*
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
         statement -> expression-statement | block | if-statement | while-statement | for-statement
         while-statement -> "while" "(" expression ")" statement
@@ -55,15 +58,15 @@ pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
-    FnCall(Box<Expr>, Vec<Box<Expr>>),
+    FnCall(Box<Expr>, Vec<Expr>),
 }
 
 #[derive(PartialEq, Debug)]
 pub enum Statement {
     Print(Expr),
     Expr(Expr),
-    VarDecl(usize, String, Option<Expr>),
-    Block(Vec<Box<Statement>>),
+    VarDecl(Token, String, Option<Expr>),
+    Block(Vec<Statement>),
     If(Expr, Box<Statement>, Option<Box<Statement>>),
     While(Expr, Box<Statement>),
     For(
@@ -72,6 +75,7 @@ pub enum Statement {
         Option<Expr>,
         Box<Statement>,
     ),
+    Fun(Token, String, Vec<String>, Vec<Statement>),
 }
 
 pub struct Parser<'a, 'b, T: ErrorReporter> {
@@ -149,8 +153,8 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         }
     }
 
-    fn arguments(&mut self) -> Result<Vec<Box<Expr>>, Error> {
-        let mut arguments = vec![Box::new(self.assignment()?)];
+    fn arguments(&mut self) -> Result<Vec<Expr>, Error> {
+        let mut arguments = vec![self.assignment()?];
 
         while self.next_if_match(TokenKind::Comma) {
             if arguments.len() >= 255 {
@@ -159,7 +163,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
                     line: self.peek().unwrap().line,
                 });
             }
-            arguments.push(Box::new(self.assignment()?));
+            arguments.push(self.assignment()?);
         }
 
         Ok(arguments)
@@ -489,11 +493,11 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
     }
 
     fn var_declaration(&mut self) -> Result<Statement, Error> {
-        let line = self.peek_back().line;
+        let var_token = self.peek_back().clone();
 
         let name_err = Error::Syntax {
             message: String::from("Expected an identifer after the 'var' keyword"),
-            line,
+            line: var_token.line,
         };
 
         let name = match self.next() {
@@ -514,14 +518,14 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
                         TokenKind::Semicolon,
                         "Expected a semi-colon at the end of the statement",
                     )?;
-                    Ok(Statement::VarDecl(line, name, Some(expression)))
+                    Ok(Statement::VarDecl(var_token, name, Some(expression)))
                 }
                 _ => {
                     self.consume(
                         TokenKind::Semicolon,
                         "Expected a semi-colon at the end of the statement",
                     )?;
-                    Ok(Statement::VarDecl(line, name, None))
+                    Ok(Statement::VarDecl(var_token, name, None))
                 }
             },
             _ => Err(Error::Syntax {
@@ -531,9 +535,103 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         }
     }
 
+    fn fun_declaration(&mut self) -> Result<Statement, Error> {
+        Ok(self.function()?)
+    }
+
+    fn function(&mut self) -> Result<Statement, Error> {
+        let fun_token = self.peek_back().clone();
+
+        let name_err = Error::Syntax {
+            message: String::from("Expected an identifer after the 'fun' keyword"),
+            line: fun_token.line,
+        };
+
+        let name = match self.next() {
+            Some(token) => match &token.kind {
+                TokenKind::Identifier(value) => value.clone(),
+                _ => return Err(name_err),
+            },
+            _ => return Err(name_err),
+        };
+
+        self.consume(
+            TokenKind::LeftParen,
+            "Expected an opening parenthese after the name of the function",
+        )?;
+
+        let mut paramters = vec![];
+
+        if !self.next_if_match(TokenKind::RightParen) {
+            paramters = self.paramters()?;
+            self.consume(
+                TokenKind::RightParen,
+                "Expected a closing parenthese after the paramters",
+            )?;
+        }
+
+        self.consume(TokenKind::LeftBrace, "Expected a block after the paramters")?;
+
+        let body = self.block()?;
+
+        match body {
+            Statement::Block(body) => Ok(Statement::Fun(fun_token, name, paramters, body)),
+            _ => Err(Error::Runtime {
+                message: String::from("Expected the body of the function to be a block"),
+                line: fun_token.line,
+            }),
+        }
+    }
+
+    fn paramters(&mut self) -> Result<Vec<String>, Error> {
+        let mut result = vec![];
+
+        if let Some(token) = self.peek() {
+            if let TokenKind::Identifier(name) = &token.kind {
+                result.push(name.clone());
+                self.next();
+            } else {
+                return Err(Error::Syntax {
+                    message: String::from("Expected an identifier or a closing parenthese"),
+                    line: self.peek_back().line,
+                });
+            }
+        } else {
+            return Err(Error::Syntax {
+                message: String::from(
+                    "Expected an identifier or a closing parenthese, but get nothing",
+                ),
+                line: self.get_last_line(),
+            });
+        }
+
+        while self.next_if_match(TokenKind::Comma) {
+            let error = Error::Syntax {
+                message: String::from("Expected an identifier after the comma"),
+                line: self.peek_back().line,
+            };
+
+            if let Some(token) = self.peek() {
+                if let TokenKind::Identifier(name) = &token.kind {
+                    //TODO think about any optimization for this
+                    result.push(name.clone());
+                    self.next();
+                } else {
+                    return Err(error);
+                }
+            } else {
+                return Err(error);
+            }
+        }
+
+        Ok(result)
+    }
+
     fn declaration(&mut self) -> Result<Statement, Error> {
         if self.next_if_match(TokenKind::Var) {
             Ok(self.var_declaration()?)
+        } else if self.next_if_match(TokenKind::Fun) {
+            Ok(self.fun_declaration()?)
         } else {
             Ok(self.statement()?)
         }
@@ -546,7 +644,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
             if token.kind == TokenKind::RightBrace || token.kind == TokenKind::End {
                 break;
             }
-            declarations.push(Box::new(self.declaration()?));
+            declarations.push(self.declaration()?);
         }
 
         self.consume(TokenKind::RightBrace, "Unterminated block")?;

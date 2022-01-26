@@ -43,7 +43,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 self.expression(expr, environment)?;
                 Ok(())
             }
-            Statement::VarDecl(line, name, initializer) => {
+            Statement::VarDecl(token, name, initializer) => {
                 let right = match initializer {
                     Some(expr) => self.expression(expr, Rc::clone(&environment))?,
                     None => DataType::Nil,
@@ -53,7 +53,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     Ok(_) => Ok(()),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is defined before", name),
-                        line: *line,
+                        line: token.line,
                     }),
                 }
             }
@@ -120,6 +120,14 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     }
                     None => {}
                 }
+
+                Ok(())
+            }
+            Statement::Fun(token, name, parameters, body) => {
+                println!(
+                    "fun_token: {:?}, name: {:?}, parameters: {:?}, body: {:#?}",
+                    token, name, parameters, body
+                );
 
                 Ok(())
             }
