@@ -352,7 +352,7 @@ impl<'a, 'b, T: ErrorReporter> Scanner<'a, 'b, T> {
                 let mut value = String::from(ch);
 
                 while let Some(ch) = self.peek() {
-                    if ch.is_ascii_alphabetic() || ch == '_' {
+                    if ch.is_ascii_alphanumeric() || ch == '_' {
                         value.push(ch);
                         self.next();
                     } else {

@@ -2,9 +2,9 @@ fun println(string) {
   print(string);
 }
 
-// fun sum(n1, n2) {
-//   print(n1, n2);
-// }
+fun sum(n1, n2) {
+  print(n1, n2);
+}
 
 fun mutate(n) {
   n = n + 1;
