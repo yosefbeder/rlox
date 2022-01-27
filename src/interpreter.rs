@@ -126,7 +126,13 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 let local_environment = Environment::new(Some(environment));
 
                 for statement in statements {
-                    self.statement(statement, Rc::clone(&local_environment))?;
+                    match self.statement(statement, Rc::clone(&local_environment)) {
+                        Ok(value) => match value {
+                            Some(value) => return Ok(Some(value)),
+                            None => continue,
+                        },
+                        Err(err) => return Err(err),
+                    };
                 }
 
                 Ok(None)
@@ -136,9 +142,21 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     .expression(condition, Rc::clone(&environment))?
                     .is_truthy()
                 {
-                    self.statement(then_branch, Rc::clone(&environment))?;
+                    match self.statement(then_branch, Rc::clone(&environment)) {
+                        Ok(value) => match value {
+                            Some(value) => return Ok(Some(value)),
+                            None => {}
+                        },
+                        Err(err) => return Err(err),
+                    };
                 } else if let Some(else_branch) = else_branch {
-                    self.statement(else_branch, Rc::clone(&environment))?;
+                    match self.statement(else_branch, Rc::clone(&environment)) {
+                        Ok(value) => match value {
+                            Some(value) => return Ok(Some(value)),
+                            None => {}
+                        },
+                        Err(err) => return Err(err),
+                    };
                 }
                 Ok(None)
             }
@@ -147,7 +165,13 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     .expression(condition, Rc::clone(&environment))?
                     .is_truthy()
                 {
-                    self.statement(body, Rc::clone(&environment))?;
+                    match self.statement(body, Rc::clone(&environment)) {
+                        Ok(value) => match value {
+                            Some(value) => return Ok(Some(value)),
+                            None => continue,
+                        },
+                        Err(err) => return Err(err),
+                    }
                 }
                 Ok(None)
             }
@@ -173,7 +197,13 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                             .expression(expr, Rc::clone(&local_environment))?
                             .is_truthy()
                         {
-                            self.statement(body, Rc::clone(&local_environment))?;
+                            match self.statement(body, Rc::clone(&local_environment)) {
+                                Ok(value) => match value {
+                                    Some(value) => return Ok(Some(value)),
+                                    None => {}
+                                },
+                                Err(err) => return Err(err),
+                            };
                             match increment {
                                 Some(expr) => {
                                     self.expression(expr, Rc::clone(&local_environment))?;

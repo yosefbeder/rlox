@@ -1,12 +1,22 @@
-fun do_something(n) {
-  if (n > 20) {
-    return;
+fun do_fun_stuff(return_something) {
+  for(var i = 0; i < 20; i = i + 1) {
+    if (i == 10 and return_something) return "i is 10"; 
+    print(i);
   }
-
-  print(n);
-  return n;
 }
 
-print(do_something(20));
-print(do_something(21));
-print(do_something(13));
+print(do_fun_stuff(true));
+print(do_fun_stuff(false));
+
+fun parent() {
+  fun child() {
+    print("I'm a good child");
+  }
+
+  return child;
+}
+
+// Don't ask me how 😏
+var child = parent();
+
+child();
