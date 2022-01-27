@@ -1,33 +1,9 @@
+use super::interpreter::Callable;
 use super::scanner::TokenKind;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub trait CallableClone {
-    fn clone_box(&self) -> Box<dyn Callable>;
-}
-
-pub trait Callable: CallableClone {
-    fn arty(&self) -> usize;
-    fn call(&self, arguments: Vec<DataType>);
-}
-
-impl<T> CallableClone for T
-where
-    T: 'static + Callable + Clone,
-{
-    fn clone_box(&self) -> Box<dyn Callable> {
-        Box::new(self.clone())
-    }
-}
-
-impl Clone for Box<dyn Callable> {
-    fn clone(&self) -> Box<dyn Callable> {
-        self.clone_box()
-    }
-}
-
-//TODO remove clonning and instead give a reference
 #[derive(Clone)]
 pub enum DataType {
     Identifier(String),
@@ -36,7 +12,7 @@ pub enum DataType {
     True,
     False,
     Nil,
-    Fun(Box<dyn Callable>),
+    Fun(Callable),
 }
 
 impl DataType {
@@ -48,7 +24,14 @@ impl DataType {
             Self::True => String::from("true"),
             Self::False => String::from("false"),
             Self::Nil => String::from("nil"),
-            _ => String::new(),
+            Self::Fun(callable) => match callable {
+                Callable::Print => String::from("<native fn>"),
+                Callable::Clock => String::from("<native fn>"),
+                Callable::User {
+                    parameters: _,
+                    body: _,
+                } => format!("<user fn>"),
+            },
         }
     }
 
@@ -76,38 +59,27 @@ impl TryFrom<TokenKind> for DataType {
     }
 }
 
-#[derive(Clone)]
-pub struct PrintFun {}
-
-impl Callable for PrintFun {
-    fn arty(&self) -> usize {
-        1
-    }
-    fn call(&self, arguments: Vec<DataType>) {
-        for argument in arguments {
-            println!("{}", argument.to_string())
-        }
-    }
-}
-
-impl PrintFun {
-    pub fn new() -> DataType {
-        DataType::Fun(Box::new(PrintFun {}))
-    }
-}
-
 pub enum Environment {
     Cons(HashMap<String, DataType>, Rc<RefCell<Environment>>),
     Nil,
 }
 
 impl Environment {
-    pub fn new(enclosing: Rc<RefCell<Environment>>) -> Self {
-        Self::Cons(HashMap::new(), enclosing)
+    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self::Cons(
+            HashMap::new(),
+            match enclosing {
+                Some(enclosing) => enclosing,
+                None => Rc::new(RefCell::new(Self::Nil)),
+            },
+        )))
     }
 
     pub fn init_globals(&mut self) {
-        self.define("print", &PrintFun::new()).unwrap();
+        self.define("print", DataType::Fun(Callable::Print))
+            .unwrap();
+        self.define("clock", DataType::Fun(Callable::Clock))
+            .unwrap();
     }
 
     pub fn get(&self, name: &str) -> Option<DataType> {
@@ -120,23 +92,21 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: &str, value: &DataType) -> Result<(), ()> {
+    pub fn define(&mut self, name: &str, value: DataType) -> Result<(), ()> {
         match self {
-            Self::Cons(values, _enclosing) => {
-                match values.insert(name.to_string(), value.clone()) {
-                    Some(_) => Err(()),
-                    None => Ok(()),
-                }
-            }
+            Self::Cons(values, _enclosing) => match values.insert(name.to_string(), value) {
+                Some(_) => Err(()),
+                None => Ok(()),
+            },
             Self::Nil => Err(()),
         }
     }
 
-    pub fn assign(&mut self, name: &str, value: &DataType) -> Result<(), ()> {
+    pub fn assign(&mut self, name: &str, value: DataType) -> Result<(), ()> {
         match self {
             Self::Cons(values, enclosing) => {
                 if values.contains_key(name) {
-                    values.insert(name.to_string(), value.clone());
+                    values.insert(name.to_string(), value);
                     Ok(())
                 } else {
                     enclosing.borrow_mut().assign(name, value)

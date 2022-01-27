@@ -92,9 +92,7 @@ fn run<'a, 'b, T: ErrorReporter>(
 }
 
 fn run_repl() {
-    let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
-        Environment::Nil,
-    )))));
+    let environment = Environment::new(None);
     environment.borrow_mut().init_globals();
     let mut error_reporter = REPLErrorReporter::new();
 
@@ -124,9 +122,7 @@ fn run_file(path: String) {
             process::exit(65);
         }
     };
-    let environment = Rc::new(RefCell::new(Environment::new(Rc::new(RefCell::new(
-        Environment::Nil,
-    )))));
+    let environment = Environment::new(None);
     environment.borrow_mut().init_globals();
     let mut error_reporter = FileErrorReporter::new();
 

@@ -53,7 +53,7 @@ impl Token {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
@@ -61,7 +61,7 @@ pub enum Expr {
     FnCall(Box<Expr>, Vec<Expr>),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
     Print(Expr),
     Expr(Expr),

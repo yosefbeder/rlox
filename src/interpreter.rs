@@ -4,6 +4,63 @@ use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Instant;
+
+#[derive(Clone)]
+pub enum Callable {
+    Print,
+    Clock,
+    User {
+        parameters: Vec<String>,
+        body: Vec<Statement>,
+    },
+}
+
+impl Callable {
+    fn call<'a, 'b, 'c, T: ErrorReporter>(
+        &self,
+        arguments: Vec<DataType>,
+        interpreter: &'a Interpreter<'b, 'c, T>,
+        start_time: Instant,
+    ) -> Result<DataType, Error> {
+        match self {
+            Self::Print => {
+                println!("{}", arguments[0].to_string());
+                Ok(DataType::Nil)
+            }
+            Self::Clock => Ok(DataType::Number(start_time.elapsed().as_millis() as f64)),
+            Self::User { parameters, body } => {
+                let environment = Environment::new(None);
+                environment.borrow_mut().init_globals();
+                let zip = parameters.iter().zip(arguments.iter());
+
+                for (parameter, argument) in zip {
+                    environment
+                        .borrow_mut()
+                        .define(parameter, argument.clone())
+                        .unwrap();
+                }
+
+                for statement in body {
+                    interpreter.statement(statement, Rc::clone(&environment))?;
+                }
+
+                Ok(DataType::Nil)
+            }
+        }
+    }
+
+    fn arty(&self) -> usize {
+        match self {
+            Self::Print => 1,
+            Self::Clock => 0,
+            Self::User {
+                parameters,
+                body: _,
+            } => parameters.len(),
+        }
+    }
+}
 
 impl Expr {
     fn get_line(&self) -> usize {
@@ -19,6 +76,7 @@ impl Expr {
 pub struct Interpreter<'a, 'b, T: ErrorReporter> {
     program: &'a [Statement],
     error_reporter: &'b mut T,
+    start_time: Instant,
 }
 
 impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
@@ -26,6 +84,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
         Self {
             program,
             error_reporter,
+            start_time: Instant::now(),
         }
     }
 
@@ -49,7 +108,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     None => DataType::Nil,
                 };
 
-                match environment.borrow_mut().define(name, &right) {
+                match environment.borrow_mut().define(name, right) {
                     Ok(_) => Ok(()),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is defined before", name),
@@ -58,7 +117,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 }
             }
             Statement::Block(statements) => {
-                let local_environment = Rc::new(RefCell::new(Environment::new(environment)));
+                let local_environment = Environment::new(Some(environment));
 
                 for statement in statements {
                     self.statement(statement, Rc::clone(&local_environment))?;
@@ -87,8 +146,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 Ok(())
             }
             Statement::For(initializer, condition, increment, body) => {
-                let local_environment =
-                    Rc::new(RefCell::new(Environment::new(Rc::clone(&environment))));
+                let local_environment = Environment::new(Some(Rc::clone(&environment)));
 
                 match initializer {
                     Some(statement) => match &**statement {
@@ -124,12 +182,19 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 Ok(())
             }
             Statement::Fun(token, name, parameters, body) => {
-                println!(
-                    "fun_token: {:?}, name: {:?}, parameters: {:?}, body: {:#?}",
-                    token, name, parameters, body
-                );
-
-                Ok(())
+                match environment.borrow_mut().define(
+                    name,
+                    DataType::Fun(Callable::User {
+                        parameters: parameters.clone(),
+                        body: body.clone(),
+                    }),
+                ) {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(Error::Runtime {
+                        message: format!("{} is already defined", name),
+                        line: token.line,
+                    }),
+                }
             }
         }
     }
@@ -317,7 +382,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         Expr::Literal(Token {
                             kind: TokenKind::Identifier(name),
                             line,
-                        }) => match environment.borrow_mut().assign(name, &right) {
+                        }) => match environment.borrow_mut().assign(name, right.clone()) {
                             Ok(()) => Ok(right),
                             Err(_) => Err(Error::Runtime {
                                 message: format!("{} is undefined", name),
@@ -353,7 +418,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         let arguments_count = interpreted_arguments.len();
 
                         if arty == arguments_count {
-                            callable.call(interpreted_arguments);
+                            return callable.call(interpreted_arguments, self, self.start_time);
                         } else {
                             return Err(Error::Runtime {
                                 message: format!(
@@ -374,8 +439,6 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         });
                     }
                 }
-
-                Ok(DataType::Nil)
             }
         }
     }
