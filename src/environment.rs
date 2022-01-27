@@ -30,6 +30,7 @@ impl DataType {
                 Callable::User {
                     parameters: _,
                     body: _,
+                    closure: _,
                 } => format!("<user fn>"),
             },
         }

@@ -11,6 +11,7 @@ pub enum Callable {
     Print,
     Clock,
     User {
+        closure: Rc<RefCell<Environment>>,
         parameters: Vec<String>,
         body: Vec<Statement>,
     },
@@ -29,9 +30,12 @@ impl Callable {
                 Ok(DataType::Nil)
             }
             Self::Clock => Ok(DataType::Number(start_time.elapsed().as_millis() as f64)),
-            Self::User { parameters, body } => {
-                let environment = Environment::new(None);
-                environment.borrow_mut().init_globals();
+            Self::User {
+                parameters,
+                body,
+                closure,
+            } => {
+                let environment = Environment::new(Some(Rc::clone(closure)));
                 let zip = parameters.iter().zip(arguments.iter());
 
                 for (parameter, argument) in zip {
@@ -63,6 +67,7 @@ impl Callable {
             Self::User {
                 parameters,
                 body: _,
+                closure: _,
             } => parameters.len(),
         }
     }
@@ -223,6 +228,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     DataType::Fun(Callable::User {
                         parameters: parameters.clone(),
                         body: body.clone(),
+                        closure: Rc::clone(&environment),
                     }),
                 ) {
                     Ok(_) => Ok(None),
