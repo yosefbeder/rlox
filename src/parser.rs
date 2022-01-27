@@ -11,7 +11,8 @@ use crate::error::ErrorReporter;
         function -> "(" parameters* ")" block
         paramters -> IDENTIFIER ("," IDENTIFIER)*
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
-        statement -> expression-statement | block | if-statement | while-statement | for-statement
+        statement -> expression-statement | block | if-statement | while-statement | for-statement | return-statement
+        return-statement -> "return" expression? ";"
         while-statement -> "while" "(" expression ")" statement
         for-statement -> "for" "(" (";" | var-declaration | expression-statement) (expression? ";") expression? ")" statement
         block -> "{" declaration* "}"
@@ -479,6 +480,22 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         ))
     }
 
+    fn return_statement(&mut self) -> Result<Statement, Error> {
+        let token = self.peek_back().clone();
+
+        let mut expression = None;
+
+        if !self.next_if_match(TokenKind::Semicolon) {
+            expression = Some(self.expression()?);
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected a semi-colon after the return statement",
+            )?;
+        }
+
+        Ok(Statement::Return(token, expression))
+    }
+
     fn statement(&mut self) -> Result<Statement, Error> {
         if self.next_if_match(TokenKind::LeftBrace) {
             Ok(self.block()?)
@@ -488,6 +505,8 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
             Ok(self.while_statement()?)
         } else if self.next_if_match(TokenKind::For) {
             Ok(self.for_statement()?)
+        } else if self.next_if_match(TokenKind::Return) {
+            Ok(self.return_statement()?)
         } else {
             Ok(self.expression_statement()?)
         }

@@ -1,9 +1,12 @@
-fun do_some_fun(some_value, some_fun) {
-  some_fun(some_value);
-}
+fun do_something(n) {
+  if (n > 20) {
+    return;
+  }
 
-fun println(n) {
   print(n);
+  return n;
 }
 
-do_some_fun(2, println);
+print(do_something(20));
+print(do_something(21));
+print(do_something(13));
