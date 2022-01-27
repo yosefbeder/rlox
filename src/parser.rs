@@ -76,6 +76,7 @@ pub enum Statement {
         Box<Statement>,
     ),
     Fun(Token, String, Vec<String>, Vec<Statement>),
+    Return(Token, Option<Expr>),
 }
 
 pub struct Parser<'a, 'b, T: ErrorReporter> {

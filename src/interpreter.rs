@@ -42,7 +42,13 @@ impl Callable {
                 }
 
                 for statement in body {
-                    interpreter.statement(statement, Rc::clone(&environment))?;
+                    match interpreter.statement(statement, Rc::clone(&environment)) {
+                        Ok(value) => match value {
+                            Some(value) => return Ok(value),
+                            None => continue,
+                        },
+                        Err(err) => return Err(err),
+                    };
                 }
 
                 Ok(DataType::Nil)
@@ -92,15 +98,15 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
         &self,
         statement: &Statement,
         environment: Rc<RefCell<Environment>>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<DataType>, Error> {
         match statement {
             Statement::Print(expr) => {
                 println!("{}", self.expression(expr, environment)?.to_string());
-                Ok(())
+                Ok(None)
             }
             Statement::Expr(expr) => {
                 self.expression(expr, environment)?;
-                Ok(())
+                Ok(None)
             }
             Statement::VarDecl(token, name, initializer) => {
                 let right = match initializer {
@@ -109,7 +115,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 };
 
                 match environment.borrow_mut().define(name, right) {
-                    Ok(_) => Ok(()),
+                    Ok(_) => Ok(None),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is defined before", name),
                         line: token.line,
@@ -123,7 +129,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     self.statement(statement, Rc::clone(&local_environment))?;
                 }
 
-                Ok(())
+                Ok(None)
             }
             Statement::If(condition, then_branch, else_branch) => {
                 if self
@@ -134,7 +140,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 } else if let Some(else_branch) = else_branch {
                     self.statement(else_branch, Rc::clone(&environment))?;
                 }
-                Ok(())
+                Ok(None)
             }
             Statement::While(condition, body) => {
                 while self
@@ -143,7 +149,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                 {
                     self.statement(body, Rc::clone(&environment))?;
                 }
-                Ok(())
+                Ok(None)
             }
             Statement::For(initializer, condition, increment, body) => {
                 let local_environment = Environment::new(Some(Rc::clone(&environment)));
@@ -179,7 +185,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     None => {}
                 }
 
-                Ok(())
+                Ok(None)
             }
             Statement::Fun(token, name, parameters, body) => {
                 match environment.borrow_mut().define(
@@ -189,13 +195,17 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         body: body.clone(),
                     }),
                 ) {
-                    Ok(_) => Ok(()),
+                    Ok(_) => Ok(None),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is already defined", name),
                         line: token.line,
                     }),
                 }
             }
+            Statement::Return(_token, expression) => match expression {
+                Some(expression) => Ok(Some(self.expression(expression, Rc::clone(&environment))?)),
+                None => Ok(Some(DataType::Nil)),
+            },
         }
     }
 
@@ -383,7 +393,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                             kind: TokenKind::Identifier(name),
                             line,
                         }) => match environment.borrow_mut().assign(name, right.clone()) {
-                            Ok(()) => Ok(right),
+                            Ok(_) => Ok(right),
                             Err(_) => Err(Error::Runtime {
                                 message: format!("{} is undefined", name),
                                 line: *line,
@@ -446,7 +456,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
     pub fn interpret(&mut self, environment: Rc<RefCell<Environment>>) {
         for statement in self.program.iter() {
             match self.statement(statement, Rc::clone(&environment)) {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(error) => {
                     self.error_reporter.report(error);
                     return;
