@@ -487,13 +487,11 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     }
                 }
             }
-            Expr::Lamda(token, parameters, body) => {
-                println!(
-                    "token: {:?}, parameters: {:?}, body: {:?}",
-                    token, parameters, body
-                );
-                Ok(DataType::Nil)
-            }
+            Expr::Lamda(_token, parameters, body) => Ok(DataType::Fun(Callable::User {
+                parameters: parameters.clone(),
+                body: body.clone(),
+                closure: Rc::clone(&environment),
+            })),
         }
     }
 

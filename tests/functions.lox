@@ -9,14 +9,12 @@ print(do_fun_stuff(true));
 print(do_fun_stuff(false));
 
 fun make_counter() {
-  fun count() {
+  var i = 0;
+
+  return fun () {
     i = i + 1;
     print(i);
-  }
-
-  var i = 0;
-  
-  return count;
+  };
 }
 
 var counter = make_counter();
@@ -31,3 +29,12 @@ fun fib(n) {
 for (var i = 0; i < 20; i = i + 1) {
   print(fib(i));
 }
+
+var lamda = fun () {
+  print("lamda");
+};
+lamda();
+
+(fun() {
+  print("IIFE");
+})();
