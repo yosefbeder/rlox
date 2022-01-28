@@ -10,9 +10,16 @@ print(3 < 3);
 print(3 <= 3);
 print(3 == 3);
 print(3 != 3);
-print(3, 4);
+print((3, 4));
 var a;
 a = 3;
-print(a = 3, 4); // 4
+print((a = 3, 4)); // 4
 print(a == 3); // true
+var lamda = fun () {
+  print("lamda");
+};
+lamda();
+(fun() {
+  print("IIFE");
+})();
 print(a(4 + 2, a, !"yosef"));

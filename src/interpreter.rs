@@ -80,6 +80,7 @@ impl Expr {
             Expr::Unary(operator, _expression) => operator.line,
             Expr::Binary(operator, _expression_1, _expression_2) => operator.line,
             Expr::FnCall(callee, _arguments) => callee.get_line(),
+            Expr::Lamda(token, _parameters, _body) => token.line,
         }
     }
 }
@@ -485,6 +486,13 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         });
                     }
                 }
+            }
+            Expr::Lamda(token, parameters, body) => {
+                println!(
+                    "token: {:?}, parameters: {:?}, body: {:?}",
+                    token, parameters, body
+                );
+                Ok(DataType::Nil)
             }
         }
     }

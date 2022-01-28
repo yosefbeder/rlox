@@ -8,7 +8,7 @@ use crate::error::ErrorReporter;
         program -> statement*
         declaration -> var-declaration | fun-declaration | statement
         fun-declaration -> "fun" function
-        function -> "(" parameters* ")" block
+        function -> IDENTIFIER "(" parameters? ")" block
         paramters -> IDENTIFIER ("," IDENTIFIER)*
         var-declaration -> "var" IDENTIFIER ("=" expression)? ";"
         statement -> expression-statement | block | if-statement | while-statement | for-statement | return-statement
@@ -18,7 +18,8 @@ use crate::error::ErrorReporter;
         block -> "{" declaration* "}"
         expression-statement -> expression ";"
         if-statement -> "if" "(" expression ")" statement ("else" statement)?
-        expression -> comma
+        expression -> lamda | comma
+        lamda -> "fun" "(" parameters? ")" block
         comma -> assignment ("," assignment)*
         assignment -> IDENTIFIER "=" assignment | or
         or -> and ("or" and)*
@@ -59,6 +60,7 @@ pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
+    Lamda(Token, Vec<String>, Vec<Statement>),
     FnCall(Box<Expr>, Vec<Expr>),
 }
 
@@ -386,10 +388,44 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         Ok(comma)
     }
 
-    fn expression(&mut self) -> Result<Expr, Error> {
-        let assignment = self.comma()?;
+    fn lamda(&mut self) -> Result<Expr, Error> {
+        let token = self.peek_back().clone();
 
-        Ok(assignment)
+        self.consume(
+            TokenKind::LeftParen,
+            "Expected an opening parenthese after the 'fun' keyword",
+        )?;
+
+        let mut paramters = vec![];
+
+        if !self.next_if_match(TokenKind::RightParen) {
+            paramters = self.paramters()?;
+            self.consume(
+                TokenKind::RightParen,
+                "Expected a closing parenthese after the paramters",
+            )?;
+        }
+
+        self.consume(TokenKind::LeftBrace, "Expected a block after the paramters")?;
+
+        let body = self.block()?;
+
+        match body {
+            Statement::Block(body) => Ok(Expr::Lamda(token, paramters, body)),
+            _ => Err(Error::Syntax {
+                message: String::from("Expected the body of the function to be a block"),
+                line: token.line,
+            }),
+        }
+    }
+
+    fn expression(&mut self) -> Result<Expr, Error> {
+        if self.next_if_match(TokenKind::Fun) {
+            Ok(self.lamda()?)
+        } else {
+            let comma = self.comma()?;
+            Ok(comma)
+        }
     }
 
     fn expression_statement(&mut self) -> Result<Statement, Error> {
@@ -596,7 +632,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
 
         match body {
             Statement::Block(body) => Ok(Statement::Fun(fun_token, name, paramters, body)),
-            _ => Err(Error::Runtime {
+            _ => Err(Error::Syntax {
                 message: String::from("Expected the body of the function to be a block"),
                 line: fun_token.line,
             }),
