@@ -3,6 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     Syntax { message: String, line: usize },
+    Static { message: String, line: usize },
     Runtime { message: String, line: usize },
 }
 
@@ -13,6 +14,9 @@ impl fmt::Display for Error {
         match self {
             Self::Syntax { message, line } => {
                 write!(f, "[SyntaxError]: {} [line: {}]", message, line)
+            }
+            Self::Static { message, line } => {
+                write!(f, "[StaticError]: {} [line: {}]", message, line)
             }
             Self::Runtime { message, line } => {
                 write!(f, "[RuntimeError]: {} [line: {}]", message, line)

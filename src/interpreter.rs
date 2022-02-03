@@ -3,6 +3,7 @@ use super::error::{Error, ErrorReporter};
 use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -13,15 +14,15 @@ pub enum Callable {
     User {
         closure: Rc<RefCell<Environment>>,
         parameters: Vec<String>,
-        body: Vec<Statement>,
+        body: Rc<Vec<Statement>>,
     },
 }
 
 impl Callable {
-    fn call<'a, 'b, 'c, T: ErrorReporter>(
+    fn call<'b>(
         &self,
         arguments: Vec<DataType>,
-        interpreter: &'a Interpreter<'b, 'c, T>,
+        interpreter: &'b Interpreter,
         start_time: Instant,
     ) -> Result<DataType, Error> {
         match self {
@@ -45,7 +46,7 @@ impl Callable {
                         .unwrap();
                 }
 
-                for statement in body {
+                for statement in body.iter() {
                     match interpreter.statement(statement, Rc::clone(&environment)) {
                         Ok(value) => match value {
                             Some(value) => return Ok(value),
@@ -85,19 +86,34 @@ impl Expr {
     }
 }
 
-pub struct Interpreter<'a, 'b, T: ErrorReporter> {
-    program: &'a [Statement],
-    error_reporter: &'b mut T,
+pub struct Interpreter {
     start_time: Instant,
+    globals: Rc<RefCell<Environment>>,
+    locals: HashMap<*const Expr, usize>,
 }
 
-impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
-    pub fn new(program: &'a [Statement], error_reporter: &'b mut T) -> Self {
+impl Interpreter {
+    pub fn new() -> Self {
+        let globals = Environment::new(None);
+
+        globals
+            .borrow_mut()
+            .define("print", DataType::Fun(Callable::Print))
+            .unwrap();
+        globals
+            .borrow_mut()
+            .define("clock", DataType::Fun(Callable::Clock))
+            .unwrap();
+
         Self {
-            program,
-            error_reporter,
             start_time: Instant::now(),
+            locals: HashMap::new(),
+            globals,
         }
+    }
+
+    pub fn resolve(&mut self, expression_ptr: *const Expr, depth: usize) {
+        self.locals.insert(expression_ptr, depth);
     }
 
     fn statement(
@@ -228,7 +244,7 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                     name,
                     DataType::Fun(Callable::User {
                         parameters: parameters.clone(),
-                        body: body.clone(),
+                        body: Rc::clone(body),
                         closure: Rc::clone(&environment),
                     }),
                 ) {
@@ -253,15 +269,22 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
     ) -> Result<DataType, Error> {
         match expression {
             Expr::Literal(token) => Ok(match &token.kind {
-                TokenKind::Identifier(name) => match environment.borrow().get(&name) {
-                    Some(value) => value,
-                    None => {
-                        return Err(Error::Runtime {
-                            message: format!("{} is undefined", name),
-                            line: token.line,
-                        });
+                TokenKind::Identifier(name) => {
+                    let depth = self.locals.get(&(expression as *const Expr));
+
+                    match depth {
+                        Some(depth) => environment.borrow().get_at(name, *depth).unwrap(),
+                        None => match self.globals.borrow().get(name) {
+                            Some(value) => value,
+                            None => {
+                                return Err(Error::Runtime {
+                                    message: format!("{} is undefined", name),
+                                    line: token.line,
+                                });
+                            }
+                        },
                     }
-                },
+                }
                 value => DataType::try_from(value.clone()).unwrap(),
             }),
             Expr::Unary(operator, expression) => {
@@ -429,13 +452,28 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
                         Expr::Literal(Token {
                             kind: TokenKind::Identifier(name),
                             line,
-                        }) => match environment.borrow_mut().assign(name, right.clone()) {
-                            Ok(_) => Ok(right),
-                            Err(_) => Err(Error::Runtime {
-                                message: format!("{} is undefined", name),
-                                line: *line,
-                            }),
-                        },
+                        }) => {
+                            let depth = self.locals.get(&(&**expression_1 as *const Expr));
+
+                            match depth {
+                                Some(depth) => {
+                                    environment
+                                        .borrow_mut()
+                                        .assign_at(name, right.clone(), *depth)
+                                        .unwrap();
+                                    Ok(right)
+                                }
+                                None => {
+                                    match self.globals.borrow_mut().assign(name, right.clone()) {
+                                        Ok(_) => Ok(right),
+                                        Err(_) => Err(Error::Runtime {
+                                            message: format!("{} is undefined", name),
+                                            line: *line,
+                                        }),
+                                    }
+                                }
+                            }
+                        }
                         _ => Err(Error::Runtime {
                             message: String::from("Bad assignment target"),
                             line: operator.line,
@@ -489,18 +527,18 @@ impl<'a, 'b, T: ErrorReporter> Interpreter<'a, 'b, T> {
             }
             Expr::Lamda(_token, parameters, body) => Ok(DataType::Fun(Callable::User {
                 parameters: parameters.clone(),
-                body: body.clone(),
+                body: Rc::clone(body),
                 closure: Rc::clone(&environment),
             })),
         }
     }
 
-    pub fn interpret(&mut self, environment: Rc<RefCell<Environment>>) {
-        for statement in self.program.iter() {
-            match self.statement(statement, Rc::clone(&environment)) {
+    pub fn interpret<T: ErrorReporter>(&mut self, ast: &[Statement], error_reporter: &mut T) {
+        for statement in ast {
+            match self.statement(statement, Rc::clone(&self.globals)) {
                 Ok(_) => {}
                 Err(error) => {
-                    self.error_reporter.report(error);
+                    error_reporter.report(error);
                     return;
                 }
             };

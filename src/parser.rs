@@ -1,7 +1,8 @@
 use super::error::Error;
+use super::error::ErrorReporter;
 use super::scanner::Token;
 use super::scanner::TokenKind;
-use crate::error::ErrorReporter;
+use std::rc::Rc;
 
 /*
     GRAMMAR
@@ -60,7 +61,7 @@ pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
-    Lamda(Token, Vec<String>, Vec<Statement>),
+    Lamda(Token, Vec<String>, Rc<Vec<Statement>>),
     FnCall(Box<Expr>, Vec<Expr>),
 }
 
@@ -78,7 +79,7 @@ pub enum Statement {
         Option<Expr>,
         Box<Statement>,
     ),
-    Fun(Token, String, Vec<String>, Vec<Statement>),
+    Fun(Token, String, Vec<String>, Rc<Vec<Statement>>),
     Return(Token, Option<Expr>),
 }
 
@@ -411,7 +412,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let body = self.block()?;
 
         match body {
-            Statement::Block(body) => Ok(Expr::Lamda(token, paramters, body)),
+            Statement::Block(body) => Ok(Expr::Lamda(token, paramters, Rc::new(body))),
             _ => Err(Error::Syntax {
                 message: String::from("Expected the body of the function to be a block"),
                 line: token.line,
@@ -631,7 +632,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let body = self.block()?;
 
         match body {
-            Statement::Block(body) => Ok(Statement::Fun(fun_token, name, paramters, body)),
+            Statement::Block(body) => Ok(Statement::Fun(fun_token, name, paramters, Rc::new(body))),
             _ => Err(Error::Syntax {
                 message: String::from("Expected the body of the function to be a block"),
                 line: fun_token.line,

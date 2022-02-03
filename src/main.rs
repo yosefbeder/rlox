@@ -1,14 +1,12 @@
-use rlox::environment::Environment;
 use rlox::error::{Error, ErrorReporter};
 use rlox::interpreter::Interpreter;
 use rlox::parser::Parser;
+use rlox::resolver::Resolver;
 use rlox::scanner::Scanner;
-use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::io;
 use std::process;
-use std::rc::Rc;
 
 struct REPLErrorReporter {
     errors_count: usize,
@@ -30,6 +28,9 @@ impl ErrorReporter for REPLErrorReporter {
         match error {
             Error::Syntax { message, line: _ } => {
                 eprintln!("[SyntaxError]: {}", message)
+            }
+            Error::Static { message, line: _ } => {
+                eprintln!("[StaticError]: {}", message)
             }
             Error::Runtime { message, line: _ } => {
                 eprintln!("[RuntimeError]: {}", message)
@@ -73,11 +74,7 @@ fn main() {
     }
 }
 
-fn run<'a, 'b, T: ErrorReporter>(
-    code: &'a str,
-    environment: Rc<RefCell<Environment>>,
-    error_reporter: &'b mut T,
-) {
+fn run<T: ErrorReporter>(code: &str, interpreter: &mut Interpreter, error_reporter: &mut T) {
     let tokens = Scanner::new(&code, error_reporter).scan();
     if error_reporter.has_error() {
         return;
@@ -88,12 +85,17 @@ fn run<'a, 'b, T: ErrorReporter>(
         return;
     }
 
-    Interpreter::new(&ast, error_reporter).interpret(environment);
+    let mut resolver = Resolver::new(&ast);
+    resolver.resolve(interpreter, error_reporter);
+    if error_reporter.has_error() {
+        return;
+    }
+
+    interpreter.interpret(&ast, error_reporter);
 }
 
 fn run_repl() {
-    let environment = Environment::new(None);
-    environment.borrow_mut().init_globals();
+    let mut interpreter = Interpreter::new();
     let mut error_reporter = REPLErrorReporter::new();
 
     loop {
@@ -103,7 +105,7 @@ fn run_repl() {
                 if line.trim().len() == 0 {
                     break;
                 }
-                run(&line, Rc::clone(&environment), &mut error_reporter);
+                run(&line, &mut interpreter, &mut error_reporter);
                 error_reporter.reset();
             }
             Err(err) => {
@@ -115,6 +117,7 @@ fn run_repl() {
 }
 
 fn run_file(path: String) {
+    let mut interpreter = Interpreter::new();
     let code = match fs::read_to_string(path) {
         Ok(value) => value,
         Err(err) => {
@@ -122,9 +125,7 @@ fn run_file(path: String) {
             process::exit(65);
         }
     };
-    let environment = Environment::new(None);
-    environment.borrow_mut().init_globals();
     let mut error_reporter = FileErrorReporter::new();
 
-    run(&code, Rc::clone(&environment), &mut error_reporter);
+    run(&code, &mut interpreter, &mut error_reporter);
 }

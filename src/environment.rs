@@ -76,18 +76,28 @@ impl Environment {
         )))
     }
 
-    pub fn init_globals(&mut self) {
-        self.define("print", DataType::Fun(Callable::Print))
-            .unwrap();
-        self.define("clock", DataType::Fun(Callable::Clock))
-            .unwrap();
+    pub fn get_at(&self, name: &str, depth: usize) -> Option<DataType> {
+        if depth == 0 {
+            match self {
+                Self::Cons(values, _enclosing) => match values.get(name) {
+                    Some(value) => Some(value.clone()),
+                    None => None,
+                },
+                Self::Nil => None,
+            }
+        } else {
+            match self {
+                Self::Cons(_values, enclosing) => enclosing.borrow().get_at(name, depth - 1),
+                Self::Nil => None,
+            }
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<DataType> {
         match self {
-            Self::Cons(values, enclosing) => match values.get(name) {
+            Self::Cons(values, _enclosing) => match values.get(name) {
                 Some(value) => Some(value.clone()),
-                None => enclosing.borrow().get(name),
+                None => None,
             },
             Self::Nil => None,
         }
@@ -103,14 +113,37 @@ impl Environment {
         }
     }
 
+    pub fn assign_at(&mut self, name: &str, value: DataType, depth: usize) -> Result<(), ()> {
+        if depth == 0 {
+            match self {
+                Self::Cons(values, _enclosing) => {
+                    if values.contains_key(name) {
+                        self.assign(name, value)?;
+                        Ok(())
+                    } else {
+                        Err(())
+                    }
+                }
+                Self::Nil => Err(()),
+            }
+        } else {
+            match self {
+                Self::Cons(_values, enclosing) => {
+                    enclosing.borrow_mut().assign_at(name, value, depth - 1)
+                }
+                Self::Nil => Err(()),
+            }
+        }
+    }
+
     pub fn assign(&mut self, name: &str, value: DataType) -> Result<(), ()> {
         match self {
-            Self::Cons(values, enclosing) => {
+            Self::Cons(values, _enclosing) => {
                 if values.contains_key(name) {
-                    values.insert(name.to_string(), value);
+                    values.insert(String::from(name), value);
                     Ok(())
                 } else {
-                    enclosing.borrow_mut().assign(name, value)
+                    Err(())
                 }
             }
             Self::Nil => Err(()),
