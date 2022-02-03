@@ -1,9 +1,9 @@
 var a = "global";
 
 {
-  fun printA() {
+  var printA = fun () {
     print(a);
-  }
+  };
 
   printA();
   var a = "local";

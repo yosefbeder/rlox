@@ -27,7 +27,6 @@ impl<'a> Resolver<'a> {
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new())
     }
-
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
@@ -95,6 +94,10 @@ impl<'a> Resolver<'a> {
                 self.expression(expression_2, interpreter)?;
                 Ok(())
             }
+            Expr::Unary(_token, expression) => {
+                self.expression(expression, interpreter)?;
+                Ok(())
+            }
             Expr::FnCall(expression, arguments) => {
                 self.expression(expression, interpreter)?;
                 for argument in arguments {
@@ -102,7 +105,25 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(())
             }
-            _ => Ok(()),
+            Expr::Lamda(_token, parameters, body) => {
+                let enclosing_fun = self.current_fun.clone();
+                self.current_fun = Some(FunType::Fun);
+                self.push_scope();
+
+                for parameter in parameters {
+                    self.declare(parameter);
+                    self.define(parameter);
+                }
+
+                for statement in body.iter() {
+                    self.statement(statement, interpreter)?;
+                }
+
+                self.pop_scope();
+                self.current_fun = enclosing_fun;
+
+                Ok(())
+            }
         }
     }
 
@@ -172,7 +193,42 @@ impl<'a> Resolver<'a> {
 
                 Ok(())
             }
-            _ => Ok(()),
+            Statement::If(condition, then_branch, else_branch) => {
+                self.expression(condition, interpreter)?;
+                self.statement(then_branch, interpreter)?;
+                match else_branch {
+                    Some(else_branch) => self.statement(else_branch, interpreter)?,
+                    None => {}
+                }
+                Ok(())
+            }
+            Statement::For(initializer, condition, increment, body) => {
+                self.push_scope();
+                match initializer {
+                    Some(initializer) => self.statement(initializer, interpreter)?,
+                    None => {}
+                }
+                match condition {
+                    Some(condition) => self.expression(condition, interpreter)?,
+                    None => {}
+                }
+                match increment {
+                    Some(increment) => self.expression(increment, interpreter)?,
+                    None => {}
+                }
+                self.statement(body, interpreter)?;
+                self.pop_scope();
+                Ok(())
+            }
+            Statement::While(condition, body) => {
+                self.expression(condition, interpreter)?;
+                self.statement(body, interpreter)?;
+                Ok(())
+            }
+            Statement::Print(expression) => {
+                self.expression(expression, interpreter)?;
+                Ok(())
+            }
         }
     }
 
