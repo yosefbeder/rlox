@@ -122,10 +122,6 @@ impl Interpreter {
         environment: Rc<RefCell<Environment>>,
     ) -> Result<Option<DataType>, Error> {
         match statement {
-            Statement::Print(expr) => {
-                println!("{}", self.expression(expr, environment)?.to_string());
-                Ok(None)
-            }
             Statement::Expr(expr) => {
                 self.expression(expr, environment)?;
                 Ok(None)

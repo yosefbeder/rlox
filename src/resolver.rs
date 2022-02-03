@@ -225,10 +225,6 @@ impl<'a> Resolver<'a> {
                 self.statement(body, interpreter)?;
                 Ok(())
             }
-            Statement::Print(expression) => {
-                self.expression(expression, interpreter)?;
-                Ok(())
-            }
         }
     }
 

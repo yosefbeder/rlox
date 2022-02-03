@@ -67,7 +67,6 @@ pub enum Expr {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Statement {
-    Print(Expr),
     Expr(Expr),
     VarDecl(Token, String, Option<Expr>),
     Block(Vec<Statement>),
