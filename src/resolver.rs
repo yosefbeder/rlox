@@ -4,9 +4,15 @@ use super::parser::{Expr, Statement};
 use super::scanner::TokenKind;
 use std::collections::HashMap;
 
+#[derive(Clone)]
+enum FunType {
+    Fun,
+}
+
 pub struct Resolver<'a> {
     program: &'a [Statement],
     scopes: Vec<HashMap<String, bool>>,
+    current_fun: Option<FunType>,
 }
 
 impl<'a> Resolver<'a> {
@@ -14,6 +20,7 @@ impl<'a> Resolver<'a> {
         Self {
             program,
             scopes: vec![],
+            current_fun: None,
         }
     }
 
@@ -125,6 +132,8 @@ impl<'a> Resolver<'a> {
             Statement::Fun(_token, name, parameters, body) => {
                 self.declare(name);
                 self.define(name);
+                let enclosing_fun = self.current_fun.clone();
+                self.current_fun = Some(FunType::Fun);
                 self.push_scope();
 
                 for parameter in parameters {
@@ -137,11 +146,29 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.pop_scope();
+                self.current_fun = enclosing_fun;
 
                 Ok(())
             }
             Statement::Expr(expression) => {
                 self.expression(expression, interpreter)?;
+
+                Ok(())
+            }
+            Statement::Return(token, expression) => {
+                if let None = &self.current_fun {
+                    return Err(Error::Static {
+                        message: String::from("Can't return outside a function"),
+                        line: token.line,
+                    });
+                }
+
+                match expression {
+                    Some(expression) => {
+                        self.expression(expression, interpreter)?;
+                    }
+                    None => {}
+                }
 
                 Ok(())
             }
