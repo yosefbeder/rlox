@@ -1,0 +1,16 @@
+var x;
+
+{
+  var x;
+}
+
+fun donot_use_locals() {
+  var a;
+  var b;
+}
+
+fun donot_use_parameters(
+  a,
+  b,
+  c
+) {}

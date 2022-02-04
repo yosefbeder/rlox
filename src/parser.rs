@@ -61,7 +61,7 @@ pub enum Expr {
     Literal(Token),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
-    Lamda(Token, Vec<String>, Rc<Vec<Statement>>),
+    Lamda(Token, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     FnCall(Box<Expr>, Vec<Expr>),
 }
 
@@ -78,7 +78,7 @@ pub enum Statement {
         Option<Expr>,
         Box<Statement>,
     ),
-    Fun(Token, String, Vec<String>, Rc<Vec<Statement>>),
+    Fun(Token, String, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     Return(Token, Option<Expr>),
 }
 
@@ -399,7 +399,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let mut paramters = vec![];
 
         if !self.next_if_match(TokenKind::RightParen) {
-            paramters = self.paramters()?;
+            paramters = self.parameters()?;
             self.consume(
                 TokenKind::RightParen,
                 "Expected a closing parenthese after the paramters",
@@ -411,7 +411,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let body = self.block()?;
 
         match body {
-            Statement::Block(body) => Ok(Expr::Lamda(token, paramters, Rc::new(body))),
+            Statement::Block(body) => Ok(Expr::Lamda(token, Rc::new(paramters), Rc::new(body))),
             _ => Err(Error::Syntax {
                 message: String::from("Expected the body of the function to be a block"),
                 line: token.line,
@@ -619,7 +619,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let mut paramters = vec![];
 
         if !self.next_if_match(TokenKind::RightParen) {
-            paramters = self.paramters()?;
+            paramters = self.parameters()?;
             self.consume(
                 TokenKind::RightParen,
                 "Expected a closing parenthese after the paramters",
@@ -631,7 +631,12 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let body = self.block()?;
 
         match body {
-            Statement::Block(body) => Ok(Statement::Fun(fun_token, name, paramters, Rc::new(body))),
+            Statement::Block(body) => Ok(Statement::Fun(
+                fun_token,
+                name,
+                Rc::new(paramters),
+                Rc::new(body),
+            )),
             _ => Err(Error::Syntax {
                 message: String::from("Expected the body of the function to be a block"),
                 line: fun_token.line,
@@ -639,13 +644,12 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         }
     }
 
-    fn paramters(&mut self) -> Result<Vec<String>, Error> {
+    fn parameters(&mut self) -> Result<Vec<Token>, Error> {
         let mut result = vec![];
 
         if let Some(token) = self.peek() {
-            if let TokenKind::Identifier(name) = &token.kind {
-                result.push(name.clone());
-                self.next();
+            if let TokenKind::Identifier(_) = &token.kind {
+                result.push(self.next().unwrap().clone());
             } else {
                 return Err(Error::Syntax {
                     message: String::from("Expected an identifier or a closing parenthese"),
@@ -668,10 +672,8 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
             };
 
             if let Some(token) = self.peek() {
-                if let TokenKind::Identifier(name) = &token.kind {
-                    //TODO think about any optimization for this
-                    result.push(name.clone());
-                    self.next();
+                if let TokenKind::Identifier(_) = &token.kind {
+                    result.push(self.next().unwrap().clone());
                 } else {
                     return Err(error);
                 }

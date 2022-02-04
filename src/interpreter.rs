@@ -13,7 +13,7 @@ pub enum Callable {
     Clock,
     User {
         closure: Rc<RefCell<Environment>>,
-        parameters: Vec<String>,
+        parameters: Rc<Vec<Token>>,
         body: Rc<Vec<Statement>>,
     },
 }
@@ -39,10 +39,16 @@ impl Callable {
                 let environment = Environment::new(Some(Rc::clone(closure)));
                 let zip = parameters.iter().zip(arguments.iter());
 
-                for (parameter, argument) in zip {
+                for (Token { kind, line: _ }, argument) in zip {
                     environment
                         .borrow_mut()
-                        .define(parameter, argument.clone())
+                        .define(
+                            match kind {
+                                TokenKind::Identifier(name) => name,
+                                _ => "",
+                            },
+                            argument.clone(),
+                        )
                         .unwrap();
                 }
 
@@ -239,7 +245,7 @@ impl Interpreter {
                 match environment.borrow_mut().define(
                     name,
                     DataType::Fun(Callable::User {
-                        parameters: parameters.clone(),
+                        parameters: Rc::clone(parameters),
                         body: Rc::clone(body),
                         closure: Rc::clone(&environment),
                     }),
