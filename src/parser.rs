@@ -7,7 +7,8 @@ use std::rc::Rc;
 /*
     GRAMMAR
         program -> statement*
-        declaration -> var-declaration | fun-declaration | statement
+        declaration -> var-declaration | fun-declaration | class-declaration | statement
+        class-declaration -> "class" IDENTIFIER "{" function* "}"
         fun-declaration -> "fun" function
         function -> IDENTIFIER "(" parameters? ")" block
         paramters -> IDENTIFIER ("," IDENTIFIER)*
@@ -80,6 +81,7 @@ pub enum Statement {
     ),
     Fun(Token, String, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     Return(Token, Option<Expr>),
+    Class(Token, String, Rc<Vec<Statement>>),
 }
 
 pub struct Parser<'a, 'b, T: ErrorReporter> {
@@ -599,7 +601,7 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         let fun_token = self.peek_back().clone();
 
         let name_err = Error::Syntax {
-            message: String::from("Expected an identifer after the 'fun' keyword"),
+            message: String::from("Expected an identifer"),
             line: fun_token.line,
         };
 
@@ -685,11 +687,80 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
         Ok(result)
     }
 
+    fn class_declaration(&mut self) -> Result<Statement, Error> {
+        let class_token = self.peek_back().clone();
+
+        let name_err = Error::Syntax {
+            message: String::from("Expected an identifer after the 'class' keyword"),
+            line: class_token.line,
+        };
+
+        let name = match self.next() {
+            Some(token) => match &token.kind {
+                TokenKind::Identifier(value) => value.clone(),
+                _ => return Err(name_err),
+            },
+            _ => return Err(name_err),
+        };
+
+        self.consume(TokenKind::LeftBrace, "Expected a block")?;
+
+        let mut methods = vec![];
+
+        while !self.next_if_match(TokenKind::RightBrace) {
+            match self.peek() {
+                Some(token) => match token.kind {
+                    TokenKind::Identifier(_) => {
+                        methods.push(self.function()?);
+                    }
+                    TokenKind::End => {
+                        let line = token.line;
+
+                        return Err(Error::Syntax {
+                            message: String::from("Unterimated class"),
+                            line,
+                        });
+                    }
+                    TokenKind::Fun => {
+                        let line = self.next().unwrap().line;
+                        self.function()?;
+
+                        self.error_reporter.report(Error::Syntax {
+                            message: String::from("Methods are too classy to have fun"),
+                            line,
+                        });
+                    }
+                    TokenKind::Var => {
+                        let line = self.next().unwrap().line;
+                        self.var_declaration()?;
+
+                        self.error_reporter.report(Error::Syntax {
+                            message: String::from("You can't declare a variable inside a class"),
+                            line,
+                        });
+                    }
+                    _ => {
+                        let line = token.line;
+                        self.error_reporter.report(Error::Syntax {
+                            message: String::from("Expected a function"),
+                            line,
+                        })
+                    }
+                },
+                None => {}
+            }
+        }
+
+        Ok(Statement::Class(class_token, name, Rc::new(methods)))
+    }
+
     fn declaration(&mut self) -> Result<Statement, Error> {
         if self.next_if_match(TokenKind::Var) {
             Ok(self.var_declaration()?)
         } else if self.next_if_match(TokenKind::Fun) {
             Ok(self.fun_declaration()?)
+        } else if self.next_if_match(TokenKind::Class) {
+            Ok(self.class_declaration()?)
         } else {
             Ok(self.statement()?)
         }

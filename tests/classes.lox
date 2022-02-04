@@ -1,0 +1,15 @@
+class Breakfast {
+  fun serve(who) {
+    print("Enjoy your 🥪 " + who);
+    // print("Enjoy your " + this.before() + " " + who);
+  }
+
+  before() {
+    print("🥪");
+  }
+
+  after() {
+    print("💩");
+  }
+
+var x = 30;

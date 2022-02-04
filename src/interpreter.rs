@@ -261,6 +261,7 @@ impl Interpreter {
                 Some(expression) => Ok(Some(self.expression(expression, Rc::clone(&environment))?)),
                 None => Ok(Some(DataType::Nil)),
             },
+            Statement::Class(_token, _name, _methods) => Ok(None),
         }
     }
 
