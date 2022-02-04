@@ -109,12 +109,23 @@ impl Class {
 
 #[derive(Clone)]
 pub struct Instance {
+    fields: HashMap<String, DataType>,
     pub class: Rc<Class>,
 }
 
 impl Instance {
     fn new(class: Rc<Class>) -> DataType {
-        DataType::Instance(Self { class })
+        DataType::Instance(Self {
+            fields: HashMap::new(),
+            class,
+        })
+    }
+
+    fn get(&self, name: &str) -> Option<DataType> {
+        match self.fields.get(name) {
+            Some(value) => Some(value.clone()),
+            None => None,
+        }
     }
 }
 
@@ -601,7 +612,31 @@ impl Interpreter {
                 body: Rc::clone(body),
                 closure: Rc::clone(&environment),
             })),
-            Expr::Get(_expression, _member) => Ok(DataType::Nil),
+            Expr::Get(expression, property) => {
+                let line = property.line;
+                let object = self.expression(expression, Rc::clone(&environment))?;
+
+                match object {
+                    DataType::Instance(instance) => {
+                        let property = match &property.kind {
+                            TokenKind::Identifier(name) => name,
+                            _ => "",
+                        };
+
+                        match instance.get(property) {
+                            Some(property) => Ok(property),
+                            None => Err(Error::Runtime {
+                                message: format!("{} property is undefined", property),
+                                line,
+                            }),
+                        }
+                    }
+                    _ => Err(Error::Runtime {
+                        message: String::from("Only instances have properties"),
+                        line: expression.get_line(),
+                    }),
+                }
+            }
         }
     }
 
