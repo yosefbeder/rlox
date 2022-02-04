@@ -126,6 +126,7 @@ impl Expr {
             Expr::Binary(operator, _expression_1, _expression_2) => operator.line,
             Expr::FnCall(callee, _arguments) => callee.get_line(),
             Expr::Lamda(token, _parameters, _body) => token.line,
+            Expr::Get(_expression, member) => member.line,
         }
     }
 }
@@ -600,6 +601,7 @@ impl Interpreter {
                 body: Rc::clone(body),
                 closure: Rc::clone(&environment),
             })),
+            Expr::Get(_expression, _member) => Ok(DataType::Nil),
         }
     }
 

@@ -166,6 +166,9 @@ impl<'a> Resolver<'a> {
                 self.pop_scope(error_reporter);
                 self.current_fun = enclosing_fun;
             }
+            Expr::Get(expression, _member) => {
+                self.expression(expression, interpreter, error_reporter);
+            }
         }
     }
 

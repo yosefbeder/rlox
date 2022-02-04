@@ -31,7 +31,7 @@ use std::rc::Rc;
         term -> factor (("+" | "-") factor)*
         factor -> unary (("*" | "/") unary)*
         unary -> ("-" | "!") unary | call
-        call -> primary ("(" arguments? ")")*
+        call -> primary ("(" arguments? ")" | "." IDENTIFIER)*
         arguments -> assignment ("," assignment)*
         primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | "(" expression ")"
 */
@@ -64,6 +64,7 @@ pub enum Expr {
     Binary(Token, Box<Expr>, Box<Expr>),
     Lamda(Token, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     FnCall(Box<Expr>, Vec<Expr>),
+    Get(Box<Expr>, Token),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -178,20 +179,37 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
     fn call(&mut self) -> Result<Expr, Error> {
         let mut call = self.primary()?;
 
-        if self.next_if_match(TokenKind::LeftParen) {
-            if self.next_if_match(TokenKind::RightParen) {
-                Ok(Expr::FnCall(Box::new(call), vec![]))
+        loop {
+            if self.next_if_match(TokenKind::LeftParen) {
+                if self.next_if_match(TokenKind::RightParen) {
+                    call = Expr::FnCall(Box::new(call), vec![]);
+                } else {
+                    call = Expr::FnCall(Box::new(call), self.arguments()?);
+                    self.consume(
+                        TokenKind::RightParen,
+                        "Expected a closing parenthese at the end of the function call",
+                    )?;
+                }
+            } else if self.next_if_match(TokenKind::Dot) {
+                let line = self.peek_back().line;
+
+                if let Some(token) = self.peek() {
+                    if let TokenKind::Identifier(_) = token.kind {
+                        call = Expr::Get(Box::new(call), self.next().unwrap().clone());
+                        continue;
+                    }
+                }
+
+                return Err(Error::Syntax {
+                    message: String::from("Expected an identifier after the dot"),
+                    line,
+                });
             } else {
-                call = Expr::FnCall(Box::new(call), self.arguments()?);
-                self.consume(
-                    TokenKind::RightParen,
-                    "Expected a closing parenthese at the end of the function call",
-                )?;
-                Ok(call)
+                break;
             }
-        } else {
-            Ok(call)
         }
+
+        Ok(call)
     }
 
     fn unary(&mut self) -> Result<Expr, Error> {
