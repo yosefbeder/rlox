@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 #[derive(Clone)]
-pub enum Callable {
+pub enum Fun {
     Print,
     Clock,
     User {
@@ -18,7 +18,7 @@ pub enum Callable {
     },
 }
 
-impl Callable {
+impl Fun {
     fn call<'b>(
         &self,
         arguments: Vec<DataType>,
@@ -80,6 +80,44 @@ impl Callable {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Class {
+    pub name: String,
+    _methods: Rc<Vec<Statement>>,
+}
+
+impl Class {
+    fn new(name: &str, methods: &Rc<Vec<Statement>>) -> Self {
+        Self {
+            name: String::from(name),
+            _methods: Rc::clone(methods),
+        }
+    }
+
+    fn call<'b>(
+        class: Rc<Self>,
+        _arguments: Vec<DataType>,
+        _interpreter: &'b Interpreter,
+    ) -> Result<DataType, Error> {
+        Ok(Instance::new(class))
+    }
+
+    fn arty(&self) -> usize {
+        0
+    }
+}
+
+#[derive(Clone)]
+pub struct Instance {
+    pub class: Rc<Class>,
+}
+
+impl Instance {
+    fn new(class: Rc<Class>) -> DataType {
+        DataType::Instance(Self { class })
+    }
+}
+
 impl Expr {
     fn get_line(&self) -> usize {
         match self {
@@ -104,11 +142,11 @@ impl Interpreter {
 
         globals
             .borrow_mut()
-            .define("print", DataType::Fun(Callable::Print))
+            .define("print", DataType::Fun(Fun::Print))
             .unwrap();
         globals
             .borrow_mut()
-            .define("clock", DataType::Fun(Callable::Clock))
+            .define("clock", DataType::Fun(Fun::Clock))
             .unwrap();
 
         Self {
@@ -244,7 +282,7 @@ impl Interpreter {
             Statement::Fun(token, name, parameters, body) => {
                 match environment.borrow_mut().define(
                     name,
-                    DataType::Fun(Callable::User {
+                    DataType::Fun(Fun::User {
                         parameters: Rc::clone(parameters),
                         body: Rc::clone(body),
                         closure: Rc::clone(&environment),
@@ -261,7 +299,14 @@ impl Interpreter {
                 Some(expression) => Ok(Some(self.expression(expression, Rc::clone(&environment))?)),
                 None => Ok(Some(DataType::Nil)),
             },
-            Statement::Class(_token, _name, _methods) => Ok(None),
+            Statement::Class(_token, name, methods) => {
+                environment
+                    .borrow_mut()
+                    .define(name, DataType::Class(Rc::new(Class::new(name, methods))))
+                    .unwrap();
+
+                Ok(None)
+            }
         }
     }
 
@@ -493,7 +538,6 @@ impl Interpreter {
             Expr::FnCall(callee, arguments) => {
                 let interpreted_callee = self.expression(callee, Rc::clone(&environment))?;
                 let mut interpreted_arguments = vec![];
-
                 for result in arguments
                     .iter()
                     .map(|argument| self.expression(argument, Rc::clone(&environment)))
@@ -504,13 +548,32 @@ impl Interpreter {
                     }
                 }
 
+                let arguments_count = interpreted_arguments.len();
+
                 match interpreted_callee {
-                    DataType::Fun(callable) => {
-                        let arty = callable.arty();
-                        let arguments_count = interpreted_arguments.len();
+                    DataType::Fun(fun) => {
+                        let arty = fun.arty();
 
                         if arty == arguments_count {
-                            return callable.call(interpreted_arguments, self, self.start_time);
+                            return fun.call(interpreted_arguments, self, self.start_time);
+                        } else {
+                            return Err(Error::Runtime {
+                                message: format!(
+                                    "Expected {} argument{} but got {} argument{}",
+                                    arty,
+                                    if arty != 1 { "s" } else { "" },
+                                    arguments_count,
+                                    if arguments_count != 1 { "s" } else { "" }
+                                ),
+                                line: callee.get_line(),
+                            });
+                        }
+                    }
+                    DataType::Class(class) => {
+                        let arty = class.arty();
+
+                        if arty == arguments_count {
+                            return Class::call(class, interpreted_arguments, self);
                         } else {
                             return Err(Error::Runtime {
                                 message: format!(
@@ -532,7 +595,7 @@ impl Interpreter {
                     }
                 }
             }
-            Expr::Lamda(_token, parameters, body) => Ok(DataType::Fun(Callable::User {
+            Expr::Lamda(_token, parameters, body) => Ok(DataType::Fun(Fun::User {
                 parameters: parameters.clone(),
                 body: Rc::clone(body),
                 closure: Rc::clone(&environment),

@@ -1,4 +1,4 @@
-use super::interpreter::Callable;
+use super::interpreter::{Class, Fun, Instance};
 use super::scanner::TokenKind;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -12,7 +12,9 @@ pub enum DataType {
     True,
     False,
     Nil,
-    Fun(Callable),
+    Fun(Fun),
+    Class(Rc<Class>),
+    Instance(Instance),
 }
 
 impl DataType {
@@ -24,15 +26,19 @@ impl DataType {
             Self::True => String::from("true"),
             Self::False => String::from("false"),
             Self::Nil => String::from("nil"),
-            Self::Fun(callable) => match callable {
-                Callable::Print => String::from("<native fn>"),
-                Callable::Clock => String::from("<native fn>"),
-                Callable::User {
+            Self::Fun(fun) => match fun {
+                Fun::Print => String::from("<native fun>"),
+                Fun::Clock => String::from("<native fun>"),
+                Fun::User {
                     parameters: _,
                     body: _,
                     closure: _,
-                } => format!("<user fn>"),
+                } => format!("<user fun>"),
             },
+            Self::Class(class) => format!("<{} class>", class.name),
+            Self::Instance(instance) => {
+                format!("<{} instance>", instance.class.name)
+            }
         }
     }
 

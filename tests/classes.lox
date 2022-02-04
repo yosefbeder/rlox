@@ -1,5 +1,5 @@
 class Breakfast {
-  fun serve(who) {
+  serve(who) {
     print("Enjoy your 🥪 " + who);
     // print("Enjoy your " + this.before() + " " + who);
   }
@@ -11,5 +11,11 @@ class Breakfast {
   after() {
     print("💩");
   }
+}
+
+var instance = Breakfast();
+
+print(Breakfast);
+print(instance);
 
 var x = 30;
