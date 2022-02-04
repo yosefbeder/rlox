@@ -331,13 +331,17 @@ impl Interpreter {
                         (DataType::String(left), DataType::String(right)) => {
                             Ok(DataType::String(format!("{}{}", left, right)))
                         }
+                        (DataType::Number(left), DataType::String(right)) => {
+                            Ok(DataType::String(format!("{}{}", left, right)))
+                        }
+                        (DataType::String(left), DataType::Number(right)) => {
+                            Ok(DataType::String(format!("{}{}", left, right)))
+                        }
                         (DataType::Number(left), DataType::Number(right)) => {
                             Ok(DataType::Number(left + right))
                         }
                         _ => Err(Error::Runtime {
-                            message: String::from(
-                                "Both operands should be either strings or numbers",
-                            ),
+                            message: String::from("Each operand should be a number or string"),
                             line: operator.line,
                         }),
                     },

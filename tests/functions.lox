@@ -11,6 +11,8 @@ var counter = make_counter();
 counter();
 counter();
 
+var start_time = clock();
+
 var fib = fun(n) {
   if (n <= 1) return n;  
   return fib(n - 2) + fib(n - 1);
@@ -19,6 +21,8 @@ var fib = fun(n) {
 for (var i = 0; i < 20; i = i + 1) {
   print(fib(i));
 }
+
+print("fib in 0..20 range in " + (clock() - start_time) + "ms");
 
 var lamda = fun() {
   print("lamda");
