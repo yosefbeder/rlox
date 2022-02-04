@@ -1,7 +1,9 @@
 var x;
 
 {
-  var x;
+  var x = x;
+
+  return;
 }
 
 fun donot_use_locals() {

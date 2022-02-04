@@ -111,7 +111,7 @@ impl<'a> Resolver<'a> {
         expression: &Expr,
         interpreter: &mut Interpreter,
         error_reporter: &mut T,
-    ) -> Result<(), Error> {
+    ) {
         match expression {
             Expr::Literal(token) => match &token.kind {
                 TokenKind::Identifier(name) => {
@@ -119,7 +119,7 @@ impl<'a> Resolver<'a> {
                         && self.scopes.last().unwrap().get(name).is_some()
                         && !self.scopes.last().unwrap().get(name).unwrap().defined
                     {
-                        return Err(Error::Static {
+                        error_reporter.report(Error::Static {
                             message: String::from(
                                 "Can't reference a variable inside it's declaration",
                             ),
@@ -128,25 +128,21 @@ impl<'a> Resolver<'a> {
                     }
 
                     self.resolve_local(name, expression, interpreter);
-                    Ok(())
                 }
-                _ => Ok(()),
+                _ => {}
             },
             Expr::Binary(_token, expression_1, expression_2) => {
-                self.expression(expression_1, interpreter, error_reporter)?;
-                self.expression(expression_2, interpreter, error_reporter)?;
-                Ok(())
+                self.expression(expression_1, interpreter, error_reporter);
+                self.expression(expression_2, interpreter, error_reporter);
             }
             Expr::Unary(_token, expression) => {
-                self.expression(expression, interpreter, error_reporter)?;
-                Ok(())
+                self.expression(expression, interpreter, error_reporter);
             }
             Expr::FnCall(expression, arguments) => {
-                self.expression(expression, interpreter, error_reporter)?;
+                self.expression(expression, interpreter, error_reporter);
                 for argument in arguments {
-                    self.expression(argument, interpreter, error_reporter)?;
+                    self.expression(argument, interpreter, error_reporter);
                 }
-                Ok(())
             }
             Expr::Lamda(token, parameters, body) => {
                 let enclosing_fun = self.current_fun.clone();
@@ -164,13 +160,11 @@ impl<'a> Resolver<'a> {
                 }
 
                 for statement in body.iter() {
-                    self.statement(statement, interpreter, error_reporter)?;
+                    self.statement(statement, interpreter, error_reporter);
                 }
 
                 self.pop_scope(error_reporter);
                 self.current_fun = enclosing_fun;
-
-                Ok(())
             }
         }
     }
@@ -180,24 +174,22 @@ impl<'a> Resolver<'a> {
         statement: &Statement,
         interpreter: &mut Interpreter,
         error_reporter: &mut T,
-    ) -> Result<(), Error> {
+    ) {
         match statement {
             Statement::Block(statements) => {
                 self.push_scope();
                 for statement in statements {
-                    self.statement(statement, interpreter, error_reporter)?;
+                    self.statement(statement, interpreter, error_reporter);
                 }
                 self.pop_scope(error_reporter);
-                Ok(())
             }
             Statement::VarDecl(token, name, initializer) => {
                 self.declare(name, token.line);
                 match initializer {
-                    Some(expression) => self.expression(expression, interpreter, error_reporter)?,
+                    Some(expression) => self.expression(expression, interpreter, error_reporter),
                     None => {}
                 }
                 self.define(name);
-                Ok(())
             }
             Statement::Fun(token, name, parameters, body) => {
                 self.declare(name, token.line);
@@ -217,22 +209,18 @@ impl<'a> Resolver<'a> {
                 }
 
                 for statement in body.iter() {
-                    self.statement(statement, interpreter, error_reporter)?;
+                    self.statement(statement, interpreter, error_reporter);
                 }
 
                 self.pop_scope(error_reporter);
                 self.current_fun = enclosing_fun;
-
-                Ok(())
             }
             Statement::Expr(expression) => {
-                self.expression(expression, interpreter, error_reporter)?;
-
-                Ok(())
+                self.expression(expression, interpreter, error_reporter);
             }
             Statement::Return(token, expression) => {
                 if let None = &self.current_fun {
-                    return Err(Error::Static {
+                    error_reporter.report(Error::Static {
                         message: String::from("Can't return outside a function"),
                         line: token.line,
                     });
@@ -240,48 +228,39 @@ impl<'a> Resolver<'a> {
 
                 match expression {
                     Some(expression) => {
-                        self.expression(expression, interpreter, error_reporter)?;
+                        self.expression(expression, interpreter, error_reporter);
                     }
                     None => {}
                 }
-
-                Ok(())
             }
             Statement::If(condition, then_branch, else_branch) => {
-                self.expression(condition, interpreter, error_reporter)?;
-                self.statement(then_branch, interpreter, error_reporter)?;
+                self.expression(condition, interpreter, error_reporter);
+                self.statement(then_branch, interpreter, error_reporter);
                 match else_branch {
-                    Some(else_branch) => {
-                        self.statement(else_branch, interpreter, error_reporter)?
-                    }
+                    Some(else_branch) => self.statement(else_branch, interpreter, error_reporter),
                     None => {}
                 }
-                Ok(())
             }
             Statement::For(initializer, condition, increment, body) => {
                 self.push_scope();
                 match initializer {
-                    Some(initializer) => {
-                        self.statement(initializer, interpreter, error_reporter)?
-                    }
+                    Some(initializer) => self.statement(initializer, interpreter, error_reporter),
                     None => {}
                 }
                 match condition {
-                    Some(condition) => self.expression(condition, interpreter, error_reporter)?,
+                    Some(condition) => self.expression(condition, interpreter, error_reporter),
                     None => {}
                 }
                 match increment {
-                    Some(increment) => self.expression(increment, interpreter, error_reporter)?,
+                    Some(increment) => self.expression(increment, interpreter, error_reporter),
                     None => {}
                 }
-                self.statement(body, interpreter, error_reporter)?;
+                self.statement(body, interpreter, error_reporter);
                 self.pop_scope(error_reporter);
-                Ok(())
             }
             Statement::While(condition, body) => {
-                self.expression(condition, interpreter, error_reporter)?;
-                self.statement(body, interpreter, error_reporter)?;
-                Ok(())
+                self.expression(condition, interpreter, error_reporter);
+                self.statement(body, interpreter, error_reporter);
             }
         }
     }
@@ -292,15 +271,7 @@ impl<'a> Resolver<'a> {
         error_reporter: &mut T,
     ) {
         for statement in self.program {
-            match self.statement(statement, interpreter, error_reporter) {
-                Ok(_) => {
-                    continue;
-                }
-                Err(error) => {
-                    error_reporter.report(error);
-                    break;
-                }
-            };
+            self.statement(statement, interpreter, error_reporter);
         }
     }
 }
