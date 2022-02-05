@@ -12,13 +12,25 @@ pub enum Fun {
     Print,
     Clock,
     User {
-        closure: Rc<RefCell<Environment>>,
         parameters: Rc<Vec<Token>>,
         body: Rc<Vec<Statement>>,
+        closure: Rc<RefCell<Environment>>,
     },
 }
 
 impl Fun {
+    fn new(
+        parameters: Rc<Vec<Token>>,
+        body: Rc<Vec<Statement>>,
+        closure: Rc<RefCell<Environment>>,
+    ) -> DataType {
+        DataType::Fun(Self::User {
+            parameters,
+            body,
+            closure,
+        })
+    }
+
     fn call<'b>(
         &self,
         arguments: Vec<DataType>,
@@ -80,17 +92,17 @@ impl Fun {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Class {
     pub name: String,
-    _methods: Rc<Vec<Statement>>,
+    members: HashMap<String, DataType>,
 }
 
 impl Class {
-    fn new(name: &str, methods: &Rc<Vec<Statement>>) -> Self {
+    fn new(name: &str, members: HashMap<String, DataType>) -> Self {
         Self {
             name: String::from(name),
-            _methods: Rc::clone(methods),
+            members,
         }
     }
 
@@ -100,6 +112,13 @@ impl Class {
         _interpreter: &'b Interpreter,
     ) -> Result<DataType, Error> {
         Ok(Instance::new(class))
+    }
+
+    fn get(&self, name: &str) -> Option<DataType> {
+        match self.members.get(name) {
+            Some(member) => Some(member.clone()),
+            None => None,
+        }
     }
 
     fn arty(&self) -> usize {
@@ -124,7 +143,7 @@ impl Instance {
     fn get(&self, name: &str) -> Option<DataType> {
         match self.fields.get(name) {
             Some(value) => Some(value.clone()),
-            None => None,
+            None => self.class.get(name),
         }
     }
 
@@ -299,11 +318,11 @@ impl Interpreter {
             Statement::Fun(token, name, parameters, body) => {
                 match environment.borrow_mut().define(
                     name,
-                    DataType::Fun(Fun::User {
-                        parameters: Rc::clone(parameters),
-                        body: Rc::clone(body),
-                        closure: Rc::clone(&environment),
-                    }),
+                    Fun::new(
+                        Rc::clone(parameters),
+                        Rc::clone(body),
+                        Rc::clone(&environment),
+                    ),
                 ) {
                     Ok(_) => Ok(None),
                     Err(_) => Err(Error::Runtime {
@@ -317,9 +336,30 @@ impl Interpreter {
                 None => Ok(Some(DataType::Nil)),
             },
             Statement::Class(_token, name, methods) => {
+                let mut methods_map = HashMap::new();
+
+                for statement in methods.iter() {
+                    match statement {
+                        Statement::Fun(_token, name, parameters, body) => {
+                            methods_map.insert(
+                                String::from(name),
+                                Fun::new(
+                                    Rc::clone(parameters),
+                                    Rc::clone(body),
+                                    Rc::clone(&environment),
+                                ),
+                            );
+                        }
+                        _ => (),
+                    };
+                }
+
                 environment
                     .borrow_mut()
-                    .define(name, DataType::Class(Rc::new(Class::new(name, methods))))
+                    .define(
+                        name,
+                        DataType::Class(Rc::new(Class::new(name, methods_map))),
+                    )
                     .unwrap();
 
                 Ok(None)
@@ -566,7 +606,6 @@ impl Interpreter {
                 }
 
                 let arguments_count = interpreted_arguments.len();
-
                 match interpreted_callee {
                     DataType::Fun(fun) => {
                         let arty = fun.arty();

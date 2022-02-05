@@ -269,7 +269,11 @@ impl<'a> Resolver<'a> {
                 self.expression(condition, interpreter, error_reporter);
                 self.statement(body, interpreter, error_reporter);
             }
-            Statement::Class(_token, _name, _methods) => {}
+            Statement::Class(_token, _name, methods) => {
+                for method in methods.iter() {
+                    self.statement(method, interpreter, error_reporter);
+                }
+            }
         }
     }
 
