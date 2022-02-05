@@ -1,11 +1,20 @@
-class Breakfast {
-  serve(who) {
-    if (3 > 0) {
-      print(this.x);
-      print("Enjoy your " + this.before() + " " + who);
-    }
+class Person {
+  constructor(name, age, school) {
+    this.name = name;
+    this.age = age;
+    this.school = school;
   }
 
+  introduce() {
+    print("I'm " + this.name + ", I'm " + this.age + ", and I study at " + this.school);
+  }
+}
+
+var person = Person("Ali", 20, "Cambridge");
+
+person.introduce();
+
+class Breakfast {
   before() {
     return "🥪";
   }
@@ -13,11 +22,12 @@ class Breakfast {
   after() {
     return "💩";
   }
+
+  serve(who) {
+    print("Enjoy your " + this.before() + ", " + who);
+  }
 }
 
-var instance = Breakfast();
-instance.x = "yosef";
+var breakfast = Breakfast();
 
-instance.before();
-instance.serve("yosef");
-instance.after();
+breakfast.serve("yosef");

@@ -121,10 +121,22 @@ impl Class {
 
     fn call<'b>(
         class: Rc<Self>,
-        _arguments: Vec<DataType>,
-        _interpreter: &'b Interpreter,
+        arguments: Vec<DataType>,
+        interpreter: &'b Interpreter,
     ) -> Result<DataType, Error> {
-        Ok(Instance::new(class))
+        let instance = Instance::new(Rc::clone(&class));
+
+        match class.members.get("constructor") {
+            Some(constructor) => match constructor {
+                DataType::Fun(fun) => {
+                    fun.call(arguments, interpreter, Some(Rc::new(instance.clone())))?;
+                }
+                _ => unimplemented!(),
+            },
+            None => {}
+        };
+
+        Ok(instance)
     }
 
     fn get(&self, name: &str) -> Option<DataType> {
@@ -135,7 +147,13 @@ impl Class {
     }
 
     fn arty(&self) -> usize {
-        0
+        match self.members.get("constructor") {
+            Some(constructor) => match constructor {
+                DataType::Fun(fun) => fun.arty(),
+                _ => unimplemented!(),
+            },
+            None => 0,
+        }
     }
 }
 
