@@ -31,10 +31,10 @@ impl Fun {
         })
     }
 
-    fn call<'b>(
+    fn call(
         &self,
         arguments: Vec<DataType>,
-        interpreter: &'b Interpreter,
+        interpreter: &Interpreter,
         this: Option<Rc<DataType>>,
     ) -> Result<DataType, Error> {
         match self {
@@ -716,11 +716,28 @@ impl Interpreter {
 
                         match callee {
                             Some(callee) => match callee {
-                                DataType::Fun(fun) => Ok(fun.call(
-                                    interpreted_arguments,
-                                    self,
-                                    Some(Rc::new(this)),
-                                )?),
+                                DataType::Fun(fun) => {
+                                    let arty = fun.arty();
+
+                                    if arty == arguments_count {
+                                        Ok(fun.call(
+                                            interpreted_arguments,
+                                            self,
+                                            Some(Rc::new(this)),
+                                        )?)
+                                    } else {
+                                        Err(Error::Runtime {
+                                            message: format!(
+                                                "Expected {} argument{} but got {} argument{}",
+                                                arty,
+                                                if arty != 1 { "s" } else { "" },
+                                                arguments_count,
+                                                if arguments_count != 1 { "s" } else { "" }
+                                            ),
+                                            line: token.line,
+                                        })
+                                    }
+                                }
                                 _ => Err(Error::Runtime {
                                     message: format!("{} isn't a method", method),
                                     line: token.line,
