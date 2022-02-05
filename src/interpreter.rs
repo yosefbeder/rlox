@@ -24,11 +24,11 @@ impl Fun {
         body: Rc<Vec<Statement>>,
         closure: Rc<RefCell<Environment>>,
     ) -> DataType {
-        DataType::Fun(Self::User {
+        DataType::Fun(Rc::new(Self::User {
             parameters,
             body,
             closure,
-        })
+        }))
     }
 
     fn call(
@@ -209,11 +209,11 @@ impl Interpreter {
 
         globals
             .borrow_mut()
-            .define("print", DataType::Fun(Fun::Print))
+            .define("print", DataType::Fun(Rc::new(Fun::Print)))
             .unwrap();
         globals
             .borrow_mut()
-            .define("clock", DataType::Fun(Fun::Clock))
+            .define("clock", DataType::Fun(Rc::new(Fun::Clock)))
             .unwrap();
 
         Self {
@@ -706,11 +706,11 @@ impl Interpreter {
                     _ => unimplemented!(),
                 }
             }
-            Expr::Lamda(_token, parameters, body) => Ok(DataType::Fun(Fun::User {
-                parameters: parameters.clone(),
-                body: Rc::clone(body),
-                closure: Rc::clone(&environment),
-            })),
+            Expr::Lamda(_token, parameters, body) => Ok(Fun::new(
+                Rc::clone(parameters),
+                Rc::clone(body),
+                Rc::clone(&environment),
+            )),
             Expr::Get(_token, expression, property) => {
                 let line = property.line;
                 let object = self.expression(expression, Rc::clone(&environment))?;

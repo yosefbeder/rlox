@@ -12,7 +12,7 @@ pub enum DataType {
     True,
     False,
     Nil,
-    Fun(Fun),
+    Fun(Rc<Fun>),
     Class(Rc<Class>),
     Instance(Rc<RefCell<Instance>>),
 }
@@ -26,7 +26,7 @@ impl DataType {
             Self::True => String::from("true"),
             Self::False => String::from("false"),
             Self::Nil => String::from("nil"),
-            Self::Fun(fun) => match fun {
+            Self::Fun(fun) => match &**fun {
                 Fun::Print => String::from("<native fun>"),
                 Fun::Clock => String::from("<native fun>"),
                 Fun::User {
