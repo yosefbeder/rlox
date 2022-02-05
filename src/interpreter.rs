@@ -189,7 +189,7 @@ impl Expr {
             Expr::Literal(token) => token.line,
             Expr::Unary(operator, _expression) => operator.line,
             Expr::Binary(operator, _expression_1, _expression_2) => operator.line,
-            Expr::FnCall(callee, _arguments) => callee.get_line(),
+            Expr::FunCall(token, _callee, _arguments) => token.line,
             Expr::Lamda(token, _parameters, _body) => token.line,
             Expr::Get(token, _expression, _member) => token.line,
             Expr::Set(token, _expression_1, _expression_2) => token.line,
@@ -639,7 +639,8 @@ impl Interpreter {
                     _ => Ok(DataType::Nil),
                 }
             }
-            Expr::FnCall(callee, arguments) => {
+            Expr::FunCall(token, callee, arguments) => {
+                let interpreted_callee = self.expression(callee, Rc::clone(&environment))?;
                 let mut interpreted_arguments = vec![];
                 for result in arguments
                     .iter()
@@ -651,102 +652,55 @@ impl Interpreter {
                     }
                 }
 
-                let arguments_count = interpreted_arguments.len();
-                match &**callee {
-                    Expr::Literal(token) => {
-                        let callee = self.expression(callee, Rc::clone(&environment))?;
-
-                        match callee {
-                            DataType::Fun(fun) => {
-                                let arty = fun.arty();
-
-                                if arty == arguments_count {
-                                    return fun.call(interpreted_arguments, self, None);
-                                } else {
-                                    return Err(Error::Runtime {
-                                        message: format!(
-                                            "Expected {} argument{} but got {} argument{}",
-                                            arty,
-                                            if arty != 1 { "s" } else { "" },
-                                            arguments_count,
-                                            if arguments_count != 1 { "s" } else { "" }
-                                        ),
-                                        line: token.line,
-                                    });
-                                }
-                            }
-                            DataType::Class(class) => {
-                                let arty = class.arty();
-
-                                if arty == arguments_count {
-                                    return Class::call(class, interpreted_arguments, self);
-                                } else {
-                                    return Err(Error::Runtime {
-                                        message: format!(
-                                            "Expected {} argument{} but got {} argument{}",
-                                            arty,
-                                            if arty != 1 { "s" } else { "" },
-                                            arguments_count,
-                                            if arguments_count != 1 { "s" } else { "" }
-                                        ),
-                                        line: token.line,
-                                    });
-                                }
-                            }
-                            _ => {
-                                return Err(Error::Runtime {
-                                    message: String::from("Callee didn't evaluate to a function"),
-                                    line: token.line,
-                                });
-                            }
-                        }
+                // Checking whether it's callable
+                match interpreted_callee {
+                    DataType::Fun(_) | DataType::Class(_) => {}
+                    _ => {
+                        return Err(Error::Runtime {
+                            message: String::from("Callee didn't evaluate to a callable"),
+                            line: token.line,
+                        })
                     }
-                    Expr::Get(token, expression, method) => {
+                }
+
+                // Checking arty
+                let arguments_count = interpreted_arguments.len();
+                let arty = match &interpreted_callee {
+                    DataType::Fun(fun) => fun.arty(),
+                    DataType::Class(class) => class.arty(),
+                    _ => unimplemented!(),
+                };
+
+                if arty != arguments_count {
+                    return Err(Error::Runtime {
+                        message: format!(
+                            "Expected {} argument{} but got {} argument{}",
+                            arty,
+                            if arty != 1 { "s" } else { "" },
+                            arguments_count,
+                            if arguments_count != 1 { "s" } else { "" }
+                        ),
+                        line: callee.get_line(),
+                    });
+                }
+
+                // Calling
+                match &**callee {
+                    Expr::Literal(_) => match &interpreted_callee {
+                        DataType::Fun(fun) => fun.call(interpreted_arguments, self, None),
+                        DataType::Class(class) => {
+                            Class::call(Rc::clone(class), interpreted_arguments, self)
+                        }
+                        _ => unimplemented!(),
+                    },
+                    Expr::Get(_, expression, _) => {
                         let this = self.expression(expression, Rc::clone(&environment))?;
 
-                        let method = match &method.kind {
-                            TokenKind::Identifier(name) => name,
-                            _ => "",
-                        };
-
-                        let callee = match &this {
-                            DataType::Instance(instance) => instance.borrow().get(method),
+                        match interpreted_callee {
+                            DataType::Fun(fun) => {
+                                fun.call(interpreted_arguments, self, Some(Rc::new(this)))
+                            }
                             _ => unimplemented!(),
-                        };
-
-                        match callee {
-                            Some(callee) => match callee {
-                                DataType::Fun(fun) => {
-                                    let arty = fun.arty();
-
-                                    if arty == arguments_count {
-                                        Ok(fun.call(
-                                            interpreted_arguments,
-                                            self,
-                                            Some(Rc::new(this)),
-                                        )?)
-                                    } else {
-                                        Err(Error::Runtime {
-                                            message: format!(
-                                                "Expected {} argument{} but got {} argument{}",
-                                                arty,
-                                                if arty != 1 { "s" } else { "" },
-                                                arguments_count,
-                                                if arguments_count != 1 { "s" } else { "" }
-                                            ),
-                                            line: token.line,
-                                        })
-                                    }
-                                }
-                                _ => Err(Error::Runtime {
-                                    message: format!("{} isn't a method", method),
-                                    line: token.line,
-                                }),
-                            },
-                            None => Err(Error::Runtime {
-                                message: format!("{} method isn't defined", method),
-                                line: token.line,
-                            }),
                         }
                     }
                     _ => unimplemented!(),

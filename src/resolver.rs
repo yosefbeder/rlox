@@ -186,7 +186,7 @@ impl<'a> Resolver<'a> {
             Expr::Unary(_token, expression) => {
                 self.expression(expression, interpreter, error_reporter);
             }
-            Expr::FnCall(expression, arguments) => {
+            Expr::FunCall(_token, expression, arguments) => {
                 self.expression(expression, interpreter, error_reporter);
                 for argument in arguments {
                     self.expression(argument, interpreter, error_reporter);

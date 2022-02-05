@@ -64,7 +64,7 @@ pub enum Expr {
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
     Lamda(Token, Rc<Vec<Token>>, Rc<Vec<Statement>>),
-    FnCall(Box<Expr>, Vec<Expr>),
+    FunCall(Token, Box<Expr>, Vec<Expr>),
     Get(Token, Box<Expr>, Token),
     Set(Token, Box<Expr>, Box<Expr>),
 }
@@ -183,10 +183,12 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
 
         loop {
             if self.next_if_match(TokenKind::LeftParen) {
+                let token = self.peek_back().clone();
+
                 if self.next_if_match(TokenKind::RightParen) {
-                    call = Expr::FnCall(Box::new(call), vec![]);
+                    call = Expr::FunCall(token, Box::new(call), vec![]);
                 } else {
-                    call = Expr::FnCall(Box::new(call), self.arguments()?);
+                    call = Expr::FunCall(token, Box::new(call), self.arguments()?);
                     self.consume(
                         TokenKind::RightParen,
                         "Expected a closing parenthese at the end of the function call",

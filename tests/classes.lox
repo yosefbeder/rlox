@@ -30,4 +30,10 @@ class Breakfast {
 
 var breakfast = Breakfast();
 
-breakfast.serve("yosef");
+var in_and_out = fun() {
+  print(this.before() + " -> " + this.after());
+};
+
+breakfast.in_and_out = in_and_out;
+
+breakfast.in_and_out();
