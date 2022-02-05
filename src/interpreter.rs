@@ -115,10 +115,10 @@ pub struct Instance {
 
 impl Instance {
     fn new(class: Rc<Class>) -> DataType {
-        DataType::Instance(Self {
+        DataType::Instance(Rc::new(RefCell::new(Self {
             fields: HashMap::new(),
             class,
-        })
+        })))
     }
 
     fn get(&self, name: &str) -> Option<DataType> {
@@ -126,6 +126,10 @@ impl Instance {
             Some(value) => Some(value.clone()),
             None => None,
         }
+    }
+
+    fn set(&mut self, name: &str, value: DataType) {
+        self.fields.insert(String::from(name), value);
     }
 }
 
@@ -137,7 +141,8 @@ impl Expr {
             Expr::Binary(operator, _expression_1, _expression_2) => operator.line,
             Expr::FnCall(callee, _arguments) => callee.get_line(),
             Expr::Lamda(token, _parameters, _body) => token.line,
-            Expr::Get(_expression, member) => member.line,
+            Expr::Get(token, _expression, _member) => token.line,
+            Expr::Set(token, _expression_1, _expression_2) => token.line,
         }
     }
 }
@@ -612,7 +617,7 @@ impl Interpreter {
                 body: Rc::clone(body),
                 closure: Rc::clone(&environment),
             })),
-            Expr::Get(expression, property) => {
+            Expr::Get(_token, expression, property) => {
                 let line = property.line;
                 let object = self.expression(expression, Rc::clone(&environment))?;
 
@@ -623,7 +628,7 @@ impl Interpreter {
                             _ => "",
                         };
 
-                        match instance.get(property) {
+                        match instance.borrow().get(property) {
                             Some(property) => Ok(property),
                             None => Err(Error::Runtime {
                                 message: format!("{} property is undefined", property),
@@ -635,6 +640,35 @@ impl Interpreter {
                         message: String::from("Only instances have properties"),
                         line: expression.get_line(),
                     }),
+                }
+            }
+            Expr::Set(_token, expression, value) => {
+                let value = self.expression(value, Rc::clone(&environment))?;
+
+                match &**expression {
+                    Expr::Get(token, expression, property) => {
+                        let property = match &property.kind {
+                            TokenKind::Identifier(name) => name,
+                            _ => "",
+                        };
+
+                        match self.expression(expression, Rc::clone(&environment))? {
+                            DataType::Instance(instance) => {
+                                instance.borrow_mut().set(property, value.clone());
+                                Ok(value)
+                            }
+                            _ => {
+                                return Err(Error::Runtime {
+                                    message: String::from("Only instances have properties"),
+                                    line: token.line,
+                                })
+                            }
+                        }
+                    }
+                    _ => {
+                        //? Impossible
+                        Ok(DataType::Nil)
+                    }
                 }
             }
         }

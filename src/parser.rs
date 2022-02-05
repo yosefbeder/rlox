@@ -23,7 +23,7 @@ use std::rc::Rc;
         expression -> lamda | comma
         lamda -> "fun" "(" parameters? ")" block
         comma -> assignment ("," assignment)*
-        assignment -> IDENTIFIER "=" assignment | or
+        assignment -> (call ".")? IDENTIFIER "=" assignment | or
         or -> and ("or" and)*
         and -> equality ("and" equality)*
         equality -> comparison (("==" | "!=") comparison)*
@@ -64,7 +64,8 @@ pub enum Expr {
     Binary(Token, Box<Expr>, Box<Expr>),
     Lamda(Token, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     FnCall(Box<Expr>, Vec<Expr>),
-    Get(Box<Expr>, Token),
+    Get(Token, Box<Expr>, Token),
+    Set(Token, Box<Expr>, Box<Expr>),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -191,18 +192,18 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
                     )?;
                 }
             } else if self.next_if_match(TokenKind::Dot) {
-                let line = self.peek_back().line;
+                let dot_token = self.peek_back().clone();
 
                 if let Some(token) = self.peek() {
                     if let TokenKind::Identifier(_) = token.kind {
-                        call = Expr::Get(Box::new(call), self.next().unwrap().clone());
+                        call = Expr::Get(dot_token, Box::new(call), self.next().unwrap().clone());
                         continue;
                     }
                 }
 
                 return Err(Error::Syntax {
                     message: String::from("Expected an identifier after the dot"),
-                    line,
+                    line: dot_token.line,
                 });
             } else {
                 break;
@@ -359,23 +360,26 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
 
         if let Some(token) = self.peek() {
             if token.kind == TokenKind::Equal {
-                let line = token.line;
+                let token = self.next().unwrap().clone();
 
                 match or {
                     Expr::Literal(Token {
                         kind: TokenKind::Identifier(_),
                         line: _,
                     }) => {}
+                    Expr::Get(_, _, _) => {
+                        return Ok(Expr::Set(token, Box::new(or), Box::new(self.assignment()?)))
+                    }
                     _ => {
                         self.error_reporter.report(Error::Syntax {
                             message: String::from("Bad assingment taget"),
-                            line: line,
+                            line: token.line,
                         });
                     }
                 };
 
                 Ok(Expr::Binary(
-                    self.next().unwrap().clone(),
+                    token,
                     Box::new(or),
                     Box::new(self.assignment()?),
                 ))

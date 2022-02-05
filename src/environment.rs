@@ -14,7 +14,7 @@ pub enum DataType {
     Nil,
     Fun(Fun),
     Class(Rc<Class>),
-    Instance(Instance),
+    Instance(Rc<RefCell<Instance>>),
 }
 
 impl DataType {
@@ -37,7 +37,7 @@ impl DataType {
             },
             Self::Class(class) => format!("<{} class>", class.name),
             Self::Instance(instance) => {
-                format!("<{} instance>", instance.class.name)
+                format!("<{} instance>", instance.borrow().class.name)
             }
         }
     }

@@ -13,12 +13,10 @@ class Breakfast {
   }
 }
 
+var x = 30;
 var instance = Breakfast();
 
-print(Breakfast);
-print(instance);
+x = instance.x = "yosef";
 
-instance.x;
-instance.serve();
-
-var x = 30;
+print(x);
+print(instance.x);
