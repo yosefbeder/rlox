@@ -33,7 +33,7 @@ use std::rc::Rc;
         unary -> ("-" | "!") unary | call
         call -> primary ("(" arguments? ")" | "." IDENTIFIER)*
         arguments -> assignment ("," assignment)*
-        primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | "(" expression ")"
+        primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | THIS | "(" expression ")"
 */
 
 impl Token {
@@ -44,7 +44,8 @@ impl Token {
             | TokenKind::Identifier(_)
             | TokenKind::True
             | TokenKind::False
-            | TokenKind::Nil => true,
+            | TokenKind::Nil
+            | TokenKind::This => true,
             _ => false,
         }
     }

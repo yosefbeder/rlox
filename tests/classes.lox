@@ -1,19 +1,22 @@
 class Breakfast {
   serve(who) {
-    print("Enjoy your 🥪 " + who);
-    // print("Enjoy your " + this.before() + " " + who);
+    if (3 > 0) {
+      print(this.x);
+      print("Enjoy your " + this.before() + " " + who);
+    }
   }
 
   before() {
-    print("🥪");
+    return "🥪";
   }
 
   after() {
-    print("💩");
+    return "💩";
   }
 }
 
 var instance = Breakfast();
+instance.x = "yosef";
 
 instance.before();
 instance.serve("yosef");

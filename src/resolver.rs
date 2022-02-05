@@ -4,11 +4,6 @@ use super::parser::{Expr, Statement};
 use super::scanner::{Token, TokenKind};
 use std::collections::HashMap;
 
-#[derive(Clone)]
-enum FunType {
-    Fun,
-}
-
 struct Var {
     defined: bool,
     referenced: bool,
@@ -33,11 +28,30 @@ impl Var {
     }
 }
 
+#[derive(PartialEq)]
+enum ScopeKind {
+    Block,
+    Fun,
+}
+
+struct Scope {
+    kind: ScopeKind,
+    values: HashMap<String, Var>,
+}
+
+impl Scope {
+    fn new(kind: ScopeKind) -> Self {
+        Self {
+            kind,
+            values: HashMap::new(),
+        }
+    }
+}
+
 pub struct Resolver<'a> {
     program: &'a [Statement],
-    scopes: Vec<HashMap<String, Var>>,
-    // the tuple represents (defined?, used?)
-    current_fun: Option<FunType>,
+    scopes: Vec<Scope>,
+    in_fun: bool,
 }
 
 impl<'a> Resolver<'a> {
@@ -45,20 +59,19 @@ impl<'a> Resolver<'a> {
         Self {
             program,
             scopes: vec![],
-            current_fun: None,
+            in_fun: false,
         }
     }
 
-    fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new())
+    fn push_scope(&mut self, kind: ScopeKind) {
+        self.scopes.push(Scope::new(kind))
     }
     fn pop_scope<T: ErrorReporter>(&mut self, error_reporter: &mut T) {
-        // make sure all of the variables in the scope are used
         let last_scope = self.scopes.pop();
 
         match last_scope {
             Some(last_scope) => {
-                for (key, value) in last_scope.iter() {
+                for (key, value) in last_scope.values.iter() {
                     if !value.referenced {
                         error_reporter.report(Error::Static {
                             message: format!("{} is not used", key),
@@ -79,6 +92,7 @@ impl<'a> Resolver<'a> {
         self.scopes
             .last_mut()
             .unwrap()
+            .values
             .insert(String::from(name), Var::new(line));
     }
 
@@ -87,7 +101,13 @@ impl<'a> Resolver<'a> {
             return;
         }
 
-        let var = self.scopes.last_mut().unwrap().get_mut(name).unwrap();
+        let var = self
+            .scopes
+            .last_mut()
+            .unwrap()
+            .values
+            .get_mut(name)
+            .unwrap();
 
         var.define();
     }
@@ -96,9 +116,9 @@ impl<'a> Resolver<'a> {
         let mut depth = 0;
         let mut scopes_iter = self.scopes.iter_mut();
         while let Some(scope) = scopes_iter.next_back() {
-            if scope.contains_key(name) {
+            if scope.values.contains_key(name) {
                 // use the variable
-                scope.get_mut(name).unwrap().reference();
+                scope.values.get_mut(name).unwrap().reference();
                 interpreter.resolve(expression as *const Expr, depth);
                 break;
             }
@@ -116,8 +136,15 @@ impl<'a> Resolver<'a> {
             Expr::Literal(token) => match &token.kind {
                 TokenKind::Identifier(name) => {
                     if self.scopes.len() != 0
-                        && self.scopes.last().unwrap().get(name).is_some()
-                        && !self.scopes.last().unwrap().get(name).unwrap().defined
+                        && self.scopes.last().unwrap().values.get(name).is_some()
+                        && !self
+                            .scopes
+                            .last()
+                            .unwrap()
+                            .values
+                            .get(name)
+                            .unwrap()
+                            .defined
                     {
                         error_reporter.report(Error::Static {
                             message: String::from(
@@ -128,6 +155,27 @@ impl<'a> Resolver<'a> {
                     }
 
                     self.resolve_local(name, expression, interpreter);
+                }
+                TokenKind::This => {
+                    if !self.in_fun {
+                        error_reporter.report(Error::Static {
+                            message: String::from("'this' can only be inside function bodies"),
+                            line: token.line,
+                        })
+                    } else {
+                        let mut depth = 0;
+                        let mut scopes_iter = self.scopes.iter();
+
+                        while let Some(scope) = scopes_iter.next_back() {
+                            if scope.kind == ScopeKind::Fun {
+                                break;
+                            }
+
+                            depth += 1;
+                        }
+
+                        interpreter.resolve(expression as *const Expr, depth);
+                    }
                 }
                 _ => {}
             },
@@ -145,9 +193,9 @@ impl<'a> Resolver<'a> {
                 }
             }
             Expr::Lamda(token, parameters, body) => {
-                let enclosing_fun = self.current_fun.clone();
-                self.current_fun = Some(FunType::Fun);
-                self.push_scope();
+                let enclosing = self.in_fun;
+                self.in_fun = true;
+                self.push_scope(ScopeKind::Fun);
 
                 for Token { kind, line: _ } in parameters.iter() {
                     match kind {
@@ -164,7 +212,7 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.pop_scope(error_reporter);
-                self.current_fun = enclosing_fun;
+                self.in_fun = enclosing;
             }
             Expr::Get(_token, expression, _member) => {
                 self.expression(expression, interpreter, error_reporter);
@@ -184,7 +232,7 @@ impl<'a> Resolver<'a> {
     ) {
         match statement {
             Statement::Block(statements) => {
-                self.push_scope();
+                self.push_scope(ScopeKind::Block);
                 for statement in statements {
                     self.statement(statement, interpreter, error_reporter);
                 }
@@ -201,9 +249,9 @@ impl<'a> Resolver<'a> {
             Statement::Fun(token, name, parameters, body) => {
                 self.declare(name, token.line);
                 self.define(name);
-                let enclosing_fun = self.current_fun.clone();
-                self.current_fun = Some(FunType::Fun);
-                self.push_scope();
+                let enclosing = self.in_fun.clone();
+                self.in_fun = true;
+                self.push_scope(ScopeKind::Fun);
 
                 for Token { kind, line } in parameters.iter() {
                     match kind {
@@ -220,13 +268,13 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.pop_scope(error_reporter);
-                self.current_fun = enclosing_fun;
+                self.in_fun = enclosing;
             }
             Statement::Expr(expression) => {
                 self.expression(expression, interpreter, error_reporter);
             }
             Statement::Return(token, expression) => {
-                if let None = &self.current_fun {
+                if !self.in_fun {
                     error_reporter.report(Error::Static {
                         message: String::from("Can't return outside a function"),
                         line: token.line,
@@ -249,7 +297,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             Statement::For(initializer, condition, increment, body) => {
-                self.push_scope();
+                self.push_scope(ScopeKind::Block);
                 match initializer {
                     Some(initializer) => self.statement(initializer, interpreter, error_reporter),
                     None => {}
