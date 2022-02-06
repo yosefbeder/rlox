@@ -34,6 +34,7 @@ pub enum TokenKind {
     // Keywords
     And,
     Class,
+    Extends,
     Else,
     False,
     Fun,
@@ -92,6 +93,7 @@ impl<'a, 'b, T: ErrorReporter> Scanner<'a, 'b, T> {
     pub fn scan(&mut self) -> Vec<Token> {
         let keywords_map = HashMap::from([
             (String::from("and"), TokenKind::And),
+            (String::from("extends"), TokenKind::Extends),
             (String::from("class"), TokenKind::Class),
             (String::from("else"), TokenKind::Else),
             (String::from("false"), TokenKind::False),
