@@ -48,10 +48,17 @@ impl Scope {
     }
 }
 
+#[derive(Clone, PartialEq)]
+enum FunType {
+    Fun,
+    Init,
+}
+
 pub struct Resolver<'a> {
     program: &'a [Statement],
     scopes: Vec<Scope>,
-    in_fun: bool,
+    current_fun: Option<FunType>,
+    in_class: bool,
 }
 
 impl<'a> Resolver<'a> {
@@ -59,7 +66,8 @@ impl<'a> Resolver<'a> {
         Self {
             program,
             scopes: vec![],
-            in_fun: false,
+            current_fun: None,
+            in_class: false,
         }
     }
 
@@ -157,7 +165,7 @@ impl<'a> Resolver<'a> {
                     self.resolve_local(name, expression, interpreter);
                 }
                 TokenKind::This => {
-                    if !self.in_fun {
+                    if self.current_fun.is_none() {
                         error_reporter.report(Error::Static {
                             message: String::from("'this' can only be inside function bodies"),
                             line: token.line,
@@ -193,9 +201,9 @@ impl<'a> Resolver<'a> {
                 }
             }
             Expr::Lamda(token, parameters, body) => {
-                let enclosing = self.in_fun;
-                self.in_fun = true;
-                self.push_scope(ScopeKind::Fun);
+                let enclosing = self.current_fun.clone();
+                self.current_fun = Some(FunType::Fun);
+                self.push_scope(ScopeKind::Fun); // this scope
                 self.push_scope(ScopeKind::Block);
 
                 for Token { kind, line: _ } in parameters.iter() {
@@ -214,7 +222,7 @@ impl<'a> Resolver<'a> {
 
                 self.pop_scope(error_reporter);
                 self.pop_scope(error_reporter);
-                self.in_fun = enclosing;
+                self.current_fun = enclosing;
             }
             Expr::Get(_token, expression, _member) => {
                 self.expression(expression, interpreter, error_reporter);
@@ -251,9 +259,13 @@ impl<'a> Resolver<'a> {
             Statement::Fun(token, name, parameters, body) => {
                 self.declare(name, token.line);
                 self.define(name);
-                let enclosing = self.in_fun.clone();
-                self.in_fun = true;
-                self.push_scope(ScopeKind::Fun);
+                let enclosing = self.current_fun.clone();
+                self.current_fun = if name == "init" && self.in_class {
+                    Some(FunType::Init)
+                } else {
+                    Some(FunType::Fun)
+                };
+                self.push_scope(ScopeKind::Fun); // this scope
                 self.push_scope(ScopeKind::Block);
 
                 for Token { kind, line } in parameters.iter() {
@@ -272,15 +284,22 @@ impl<'a> Resolver<'a> {
 
                 self.pop_scope(error_reporter);
                 self.pop_scope(error_reporter);
-                self.in_fun = enclosing;
+                self.current_fun = enclosing;
             }
             Statement::Expr(expression) => {
                 self.expression(expression, interpreter, error_reporter);
             }
             Statement::Return(token, expression) => {
-                if !self.in_fun {
+                if self.current_fun.is_none() {
                     error_reporter.report(Error::Static {
                         message: String::from("Can't return outside a function"),
+                        line: token.line,
+                    });
+                }
+
+                if self.current_fun == Some(FunType::Init) {
+                    error_reporter.report(Error::Static {
+                        message: String::from("Can't return from init"),
                         line: token.line,
                     });
                 }
@@ -322,9 +341,11 @@ impl<'a> Resolver<'a> {
                 self.statement(body, interpreter, error_reporter);
             }
             Statement::Class(_token, _name, methods) => {
+                self.in_class = true;
                 for method in methods.iter() {
                     self.statement(method, interpreter, error_reporter);
                 }
+                self.in_class = false;
             }
         }
     }

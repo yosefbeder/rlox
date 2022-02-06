@@ -3,6 +3,8 @@ class Person {
     this.name = name;
     this.age = age;
     this.school = school;
+
+    // return this;
   }
 
   introduce() {
