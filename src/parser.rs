@@ -8,7 +8,7 @@ use std::rc::Rc;
     GRAMMAR
         program -> statement*
         declaration -> var-declaration | fun-declaration | class-declaration | statement
-        class-declaration -> "class" IDENTIFIER "{" function* "}"
+        class-declaration -> "class" IDENTIFIER ("extends" IDENTIFIER)? "{" function* "}"
         fun-declaration -> "fun" function
         function -> IDENTIFIER "(" parameters? ")" block
         paramters -> IDENTIFIER ("," IDENTIFIER)*
@@ -84,7 +84,7 @@ pub enum Statement {
     ),
     Fun(Token, String, Rc<Vec<Token>>, Rc<Vec<Statement>>),
     Return(Token, Option<Expr>),
-    Class(Token, String, Rc<Vec<Statement>>),
+    Class(Token, String, Option<String>, Rc<Vec<Statement>>),
 }
 
 pub struct Parser<'a, 'b, T: ErrorReporter> {
@@ -728,6 +728,23 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
             _ => return Err(name_err),
         };
 
+        let parent = if self.next_if_match(TokenKind::Extends) {
+            let error = Err(Error::Syntax {
+                message: String::from("Expected the parent class name after 'extends'"),
+                line: self.peek_back().line,
+            });
+
+            match self.next() {
+                Some(token) => match &token.kind {
+                    TokenKind::Identifier(value) => Some(value.to_owned()),
+                    _ => return error,
+                },
+                None => return error,
+            }
+        } else {
+            None
+        };
+
         self.consume(TokenKind::LeftBrace, "Expected a block")?;
 
         let mut methods = vec![];
@@ -776,7 +793,12 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
             }
         }
 
-        Ok(Statement::Class(class_token, name, Rc::new(methods)))
+        Ok(Statement::Class(
+            class_token,
+            name,
+            parent,
+            Rc::new(methods),
+        ))
     }
 
     fn declaration(&mut self) -> Result<Statement, Error> {

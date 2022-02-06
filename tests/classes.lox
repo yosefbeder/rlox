@@ -12,15 +12,4 @@ class Person {
   }
 }
 
-var ali = Person("Ali", 20, "Cambridge");
-var yosef = Person("Yosef", 16, "Cairo University");
-
-yosef.introduce_ali = ali.introduce;
-
-yosef.introduce_ali();
-ali.introduce();
-
-var new_student = yosef.init("Mostafa", 17, "Cairo University");
-
-print(new_student.name);
-print(yosef.name);
+class Student extends Student {}

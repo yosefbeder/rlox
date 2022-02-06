@@ -369,7 +369,7 @@ impl Interpreter {
                 Some(expression) => Ok(Some(self.expression(expression, Rc::clone(&environment))?)),
                 None => Ok(Some(DataType::Nil)),
             },
-            Statement::Class(_token, name, methods) => {
+            Statement::Class(_token, name, _parent, methods) => {
                 let mut methods_map = HashMap::new();
 
                 for statement in methods.iter() {
