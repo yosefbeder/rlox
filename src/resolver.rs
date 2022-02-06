@@ -340,7 +340,19 @@ impl<'a> Resolver<'a> {
                 self.expression(condition, interpreter, error_reporter);
                 self.statement(body, interpreter, error_reporter);
             }
-            Statement::Class(_token, _name, _parent, methods) => {
+            Statement::Class(token, name, parent, methods) => {
+                match parent {
+                    Some(parent) => {
+                        if parent == name {
+                            error_reporter.report(Error::Static {
+                                message: String::from("A class can't inherit from itself"),
+                                line: token.line,
+                            })
+                        }
+                    }
+                    None => {}
+                }
+
                 self.in_class = true;
                 for method in methods.iter() {
                     self.statement(method, interpreter, error_reporter);
