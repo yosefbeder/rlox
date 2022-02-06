@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DataType {
     Identifier(String),
     Number(f64),
@@ -33,6 +33,7 @@ impl DataType {
                     parameters: _,
                     body: _,
                     closure: _,
+                    is_initializer: _,
                 } => format!("<user fun>"),
             },
             Self::Class(class) => format!("<{} class>", class.name),
@@ -66,6 +67,7 @@ impl TryFrom<TokenKind> for DataType {
     }
 }
 
+#[derive(Debug)]
 pub enum Environment {
     Cons(HashMap<String, DataType>, Rc<RefCell<Environment>>),
     Nil,

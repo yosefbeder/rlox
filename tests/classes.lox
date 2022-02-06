@@ -1,5 +1,5 @@
 class Person {
-  constructor(name, age, school) {
+  init(name, age, school) {
     this.name = name;
     this.age = age;
     this.school = school;
@@ -10,30 +10,15 @@ class Person {
   }
 }
 
-var person = Person("Ali", 20, "Cambridge");
+var ali = Person("Ali", 20, "Cambridge");
+var yosef = Person("Yosef", 16, "Cairo University");
 
-person.introduce();
+yosef.introduce_ali = ali.introduce;
 
-class Breakfast {
-  before() {
-    return "🥪";
-  }
+yosef.introduce_ali();
+ali.introduce();
 
-  after() {
-    return "💩";
-  }
+var new_student = yosef.init("Mostafa", 17, "Cairo University");
 
-  serve(who) {
-    print("Enjoy your " + this.before() + ", " + who);
-  }
-}
-
-var breakfast = Breakfast();
-
-var in_and_out = fun() {
-  print(this.before() + " -> " + this.after());
-};
-
-breakfast.in_and_out = in_and_out;
-
-breakfast.in_and_out();
+print(new_student.name);
+print(yosef.name);

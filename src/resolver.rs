@@ -196,6 +196,7 @@ impl<'a> Resolver<'a> {
                 let enclosing = self.in_fun;
                 self.in_fun = true;
                 self.push_scope(ScopeKind::Fun);
+                self.push_scope(ScopeKind::Block);
 
                 for Token { kind, line: _ } in parameters.iter() {
                     match kind {
@@ -211,6 +212,7 @@ impl<'a> Resolver<'a> {
                     self.statement(statement, interpreter, error_reporter);
                 }
 
+                self.pop_scope(error_reporter);
                 self.pop_scope(error_reporter);
                 self.in_fun = enclosing;
             }
@@ -252,6 +254,7 @@ impl<'a> Resolver<'a> {
                 let enclosing = self.in_fun.clone();
                 self.in_fun = true;
                 self.push_scope(ScopeKind::Fun);
+                self.push_scope(ScopeKind::Block);
 
                 for Token { kind, line } in parameters.iter() {
                     match kind {
@@ -267,6 +270,7 @@ impl<'a> Resolver<'a> {
                     self.statement(statement, interpreter, error_reporter);
                 }
 
+                self.pop_scope(error_reporter);
                 self.pop_scope(error_reporter);
                 self.in_fun = enclosing;
             }

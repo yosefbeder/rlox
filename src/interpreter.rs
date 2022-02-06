@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Instant;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Fun {
     Print,
     Clock,
@@ -15,6 +15,7 @@ pub enum Fun {
         parameters: Rc<Vec<Token>>,
         body: Rc<Vec<Statement>>,
         closure: Rc<RefCell<Environment>>,
+        is_initializer: bool,
     },
 }
 
@@ -23,20 +24,17 @@ impl Fun {
         parameters: Rc<Vec<Token>>,
         body: Rc<Vec<Statement>>,
         closure: Rc<RefCell<Environment>>,
-    ) -> DataType {
-        DataType::Fun(Rc::new(Self::User {
+        is_initializer: bool,
+    ) -> Self {
+        Self::User {
             parameters,
             body,
             closure,
-        }))
+            is_initializer,
+        }
     }
 
-    fn call(
-        &self,
-        arguments: Vec<DataType>,
-        interpreter: &Interpreter,
-        this: Option<Rc<DataType>>,
-    ) -> Result<DataType, Error> {
+    fn call(&self, arguments: Vec<DataType>, interpreter: &Interpreter) -> Result<DataType, Error> {
         match self {
             Self::Print => {
                 println!("{}", arguments[0].to_string());
@@ -49,18 +47,9 @@ impl Fun {
                 parameters,
                 body,
                 closure,
+                is_initializer,
             } => {
                 let environment = Environment::new(Some(Rc::clone(closure)));
-
-                match this {
-                    Some(this) => {
-                        environment
-                            .borrow_mut()
-                            .define("this", (&*this).clone())
-                            .unwrap();
-                    }
-                    None => {}
-                }
 
                 let zip = parameters.iter().zip(arguments.iter());
 
@@ -87,8 +76,38 @@ impl Fun {
                     };
                 }
 
+                if *is_initializer {
+                    return Ok(closure.borrow().get_at("this", 0).unwrap());
+                }
+
                 Ok(DataType::Nil)
             }
+        }
+    }
+
+    fn bind(&self, instance: Rc<RefCell<Instance>>) -> Fun {
+        match self {
+            Self::User {
+                parameters,
+                body,
+                closure,
+                is_initializer,
+            } => {
+                let environment = Environment::new(Some(Rc::clone(closure)));
+
+                environment
+                    .borrow_mut()
+                    .define("this", DataType::Instance(instance))
+                    .unwrap();
+
+                Self::new(
+                    Rc::clone(parameters),
+                    Rc::clone(body),
+                    environment,
+                    *is_initializer,
+                )
+            }
+            _ => unimplemented!(),
         }
     }
 
@@ -100,46 +119,27 @@ impl Fun {
                 parameters,
                 body: _,
                 closure: _,
+                is_initializer: _,
             } => parameters.len(),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Class {
     pub name: String,
-    members: HashMap<String, DataType>,
+    members: HashMap<String, Fun>,
 }
 
 impl Class {
-    fn new(name: &str, members: HashMap<String, DataType>) -> Self {
+    fn new(name: &str, members: HashMap<String, Fun>) -> Self {
         Self {
             name: String::from(name),
             members,
         }
     }
 
-    fn call<'b>(
-        class: Rc<Self>,
-        arguments: Vec<DataType>,
-        interpreter: &'b Interpreter,
-    ) -> Result<DataType, Error> {
-        let instance = Instance::new(Rc::clone(&class));
-
-        match class.members.get("constructor") {
-            Some(constructor) => match constructor {
-                DataType::Fun(fun) => {
-                    fun.call(arguments, interpreter, Some(Rc::new(instance.clone())))?;
-                }
-                _ => unimplemented!(),
-            },
-            None => {}
-        };
-
-        Ok(instance)
-    }
-
-    fn get(&self, name: &str) -> Option<DataType> {
+    fn get(&self, name: &str) -> Option<Fun> {
         match self.members.get(name) {
             Some(member) => Some(member.clone()),
             None => None,
@@ -147,34 +147,34 @@ impl Class {
     }
 
     fn arty(&self) -> usize {
-        match self.members.get("constructor") {
-            Some(constructor) => match constructor {
-                DataType::Fun(fun) => fun.arty(),
-                _ => unimplemented!(),
-            },
+        match self.members.get("init") {
+            Some(fun) => fun.arty(),
             None => 0,
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Instance {
     fields: HashMap<String, DataType>,
     pub class: Rc<Class>,
 }
 
 impl Instance {
-    fn new(class: Rc<Class>) -> DataType {
-        DataType::Instance(Rc::new(RefCell::new(Self {
+    fn new(class: Rc<Class>) -> Self {
+        Self {
             fields: HashMap::new(),
             class,
-        })))
+        }
     }
 
-    fn get(&self, name: &str) -> Option<DataType> {
-        match self.fields.get(name) {
+    fn get(instance: Rc<RefCell<Self>>, name: &str) -> Option<DataType> {
+        match instance.borrow().fields.get(name) {
             Some(value) => Some(value.clone()),
-            None => self.class.get(name),
+            None => match instance.borrow().class.get(name) {
+                Some(fun) => Some(DataType::Fun(Rc::new(fun.bind(Rc::clone(&instance))))),
+                None => None,
+            },
         }
     }
 
@@ -347,14 +347,17 @@ impl Interpreter {
                 Ok(None)
             }
             Statement::Fun(token, name, parameters, body) => {
-                match environment.borrow_mut().define(
-                    name,
-                    Fun::new(
-                        Rc::clone(parameters),
-                        Rc::clone(body),
-                        Rc::clone(&environment),
-                    ),
-                ) {
+                let fun = Fun::new(
+                    Rc::clone(parameters),
+                    Rc::clone(body),
+                    Rc::clone(&environment),
+                    false,
+                );
+
+                match environment
+                    .borrow_mut()
+                    .define(name, DataType::Fun(Rc::new(fun)))
+                {
                     Ok(_) => Ok(None),
                     Err(_) => Err(Error::Runtime {
                         message: format!("{} is already defined", name),
@@ -378,6 +381,7 @@ impl Interpreter {
                                     Rc::clone(parameters),
                                     Rc::clone(body),
                                     Rc::clone(&environment),
+                                    name == "init",
                                 ),
                             );
                         }
@@ -685,56 +689,57 @@ impl Interpreter {
                 }
 
                 // Calling
-                match &**callee {
-                    Expr::Literal(_) => match &interpreted_callee {
-                        DataType::Fun(fun) => fun.call(interpreted_arguments, self, None),
-                        DataType::Class(class) => {
-                            Class::call(Rc::clone(class), interpreted_arguments, self)
-                        }
-                        _ => unimplemented!(),
-                    },
-                    Expr::Get(_, expression, _) => {
-                        let this = self.expression(expression, Rc::clone(&environment))?;
+                match &interpreted_callee {
+                    DataType::Fun(fun) => fun.call(interpreted_arguments, self),
+                    DataType::Class(class) => {
+                        let instance = Instance::new(Rc::clone(class));
 
-                        match interpreted_callee {
-                            DataType::Fun(fun) => {
-                                fun.call(interpreted_arguments, self, Some(Rc::new(this)))
-                            }
-                            _ => unimplemented!(),
+                        match class.get("init") {
+                            Some(fun) => fun
+                                .bind(Rc::new(RefCell::new(instance)))
+                                .call(interpreted_arguments, self),
+                            None => Ok(DataType::Instance(Rc::new(RefCell::new(instance)))),
                         }
                     }
                     _ => unimplemented!(),
                 }
             }
-            Expr::Lamda(_token, parameters, body) => Ok(Fun::new(
-                Rc::clone(parameters),
-                Rc::clone(body),
-                Rc::clone(&environment),
-            )),
+            Expr::Lamda(_token, parameters, body) => {
+                let fun = Fun::new(
+                    Rc::clone(parameters),
+                    Rc::clone(body),
+                    Rc::clone(&environment),
+                    false,
+                );
+                Ok(DataType::Fun(Rc::new(fun)))
+            }
             Expr::Get(_token, expression, property) => {
                 let line = property.line;
                 let object = self.expression(expression, Rc::clone(&environment))?;
 
-                match object {
-                    DataType::Instance(instance) => {
-                        let property = match &property.kind {
-                            TokenKind::Identifier(name) => name,
-                            _ => "",
-                        };
-
-                        match instance.borrow().get(property) {
-                            Some(property) => Ok(property),
-                            None => Err(Error::Runtime {
-                                message: format!("{} property is undefined", property),
-                                line,
-                            }),
-                        }
+                let instance = match &object {
+                    DataType::Instance(instance) => instance,
+                    _ => {
+                        return Err(Error::Runtime {
+                            message: String::from("Only instances have properties"),
+                            line: expression.get_line(),
+                        })
                     }
-                    _ => Err(Error::Runtime {
-                        message: String::from("Only instances have properties"),
-                        line: expression.get_line(),
-                    }),
-                }
+                };
+                let property = match &property.kind {
+                    TokenKind::Identifier(name) => name,
+                    _ => unimplemented!(),
+                };
+                let value = match Instance::get(Rc::clone(instance), property) {
+                    Some(value) => value,
+                    None => {
+                        return Err(Error::Runtime {
+                            message: format!("{} property is undefined", property),
+                            line,
+                        })
+                    }
+                };
+                Ok(value)
             }
             Expr::Set(_token, expression, value) => {
                 let value = self.expression(value, Rc::clone(&environment))?;
@@ -759,10 +764,7 @@ impl Interpreter {
                             }
                         }
                     }
-                    _ => {
-                        //? Impossible
-                        Ok(DataType::Nil)
-                    }
+                    _ => unimplemented!(),
                 }
             }
         }
