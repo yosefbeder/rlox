@@ -1,15 +1,41 @@
 class Person {
-  init(name, age, school) {
+  init(name, age) {
     this.name = name;
     this.age = age;
-    this.school = school;
 
     // return this;
   }
 
   introduce() {
-    print("I'm " + this.name + ", I'm " + this.age + ", and I study at " + this.school);
+    return "I'm " + this.name + ", I'm " + this.age;
   }
 }
 
-class Student extends Student {}
+
+class Student extends Person {
+  init(name, age, school) {
+    super.init(name, age);
+    this.school = school;
+  }
+
+  introduce() {
+    return super.introduce() + ", and I study at " + this.school;
+  }
+}
+
+class Employee extends Person {
+  init(name, age, company) {
+    super.init(name, age);
+    this.company = company;
+  }
+
+  introduce() {
+    return super.introduce() + ", and I work at " + this.company;
+  }
+}
+
+var ali = Student("Ali Abdaal", 21, "Cambridge");
+print(ali.introduce());
+
+var robert = Employee("Robert Nystrom", 34, "Google");
+print(robert.introduce());

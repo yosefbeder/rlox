@@ -33,7 +33,7 @@ use std::rc::Rc;
         unary -> ("-" | "!") unary | call
         call -> primary ("(" arguments? ")" | "." IDENTIFIER)*
         arguments -> assignment ("," assignment)*
-        primary -> STRING | NUMBER | IDENTIFIER | TRUE | FALSE | NIL | THIS | "(" expression ")"
+        primary -> STRING | NUMBER | IDENTIFIER | "true" | "false" | "nil" | "this" | "super" "." IDENTIFIER | "(" expression ")"
 */
 
 impl Token {
@@ -67,6 +67,7 @@ pub enum Expr {
     FunCall(Token, Box<Expr>, Vec<Expr>),
     Get(Token, Box<Expr>, Token),
     Set(Token, Box<Expr>, Box<Expr>),
+    Super(Token, Token),
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -143,10 +144,25 @@ impl<'a, 'b, T: ErrorReporter> Parser<'a, 'b, T> {
     }
 
     fn primary(&mut self) -> Result<Expr, Error> {
-        let token = self.next().unwrap();
+        let token = self.next().unwrap().clone();
 
         if token.is_literal() {
             Ok(Expr::Literal(token.clone()))
+        } else if token.kind == TokenKind::Super {
+            let super_token = self.peek_back().clone();
+            self.consume(TokenKind::Dot, "Expected a dot after 'super'")?;
+            let error = Err(Error::Syntax {
+                message: String::from("Expected an identifier after 'super.'"),
+                line: self.peek_back().line,
+            });
+
+            match self.next() {
+                Some(token) => match token.kind {
+                    TokenKind::Identifier(_) => Ok(Expr::Super(super_token, token.clone())),
+                    _ => error,
+                },
+                None => error,
+            }
         } else {
             match token.kind {
                 TokenKind::LeftParen => {

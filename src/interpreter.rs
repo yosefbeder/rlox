@@ -128,13 +128,15 @@ impl Fun {
 #[derive(Clone, Debug)]
 pub struct Class {
     pub name: String,
+    parent: Option<Rc<Class>>,
     members: HashMap<String, Fun>,
 }
 
 impl Class {
-    fn new(name: &str, members: HashMap<String, Fun>) -> Self {
+    fn new(name: &str, parent: Option<Rc<Class>>, members: HashMap<String, Fun>) -> Self {
         Self {
             name: String::from(name),
+            parent,
             members,
         }
     }
@@ -142,7 +144,10 @@ impl Class {
     fn get(&self, name: &str) -> Option<Fun> {
         match self.members.get(name) {
             Some(member) => Some(member.clone()),
-            None => None,
+            None => match &self.parent {
+                Some(class) => class.get(name),
+                None => None,
+            },
         }
     }
 
@@ -193,6 +198,7 @@ impl Expr {
             Expr::Lamda(token, _parameters, _body) => token.line,
             Expr::Get(token, _expression, _member) => token.line,
             Expr::Set(token, _expression_1, _expression_2) => token.line,
+            Expr::Super(token, _) => token.line,
         }
     }
 }
@@ -369,8 +375,42 @@ impl Interpreter {
                 Some(expression) => Ok(Some(self.expression(expression, Rc::clone(&environment))?)),
                 None => Ok(Some(DataType::Nil)),
             },
-            Statement::Class(_token, name, _parent, methods) => {
+            Statement::Class(token, name, parent, methods) => {
+                let parent = match parent {
+                    Some(name) => match self.globals.borrow().get(name) {
+                        Some(data) => match data {
+                            DataType::Class(class) => Some(class),
+                            _ => {
+                                return Err(Error::Runtime {
+                                    message: format!("{} superclass isn't a class", name),
+                                    line: token.line,
+                                })
+                            }
+                        },
+                        None => {
+                            return Err(Error::Runtime {
+                                message: format!("{} superclass isn't defined", name),
+                                line: token.line,
+                            })
+                        }
+                    },
+                    None => None,
+                };
+
                 let mut methods_map = HashMap::new();
+                let enclosing_environment = Rc::clone(&environment);
+                let mut environment = environment;
+
+                if parent.is_some() {
+                    environment = Environment::new(Some(Rc::clone(&environment)));
+                    environment
+                        .borrow_mut()
+                        .define(
+                            "super",
+                            DataType::Class(Rc::clone(parent.as_ref().unwrap())),
+                        )
+                        .unwrap();
+                }
 
                 for statement in methods.iter() {
                     match statement {
@@ -389,11 +429,11 @@ impl Interpreter {
                     };
                 }
 
-                environment
+                enclosing_environment
                     .borrow_mut()
                     .define(
                         name,
-                        DataType::Class(Rc::new(Class::new(name, methods_map))),
+                        DataType::Class(Rc::new(Class::new(name, parent, methods_map))),
                     )
                     .unwrap();
 
@@ -443,6 +483,43 @@ impl Interpreter {
                 }
                 value => DataType::try_from(value.clone()).unwrap(),
             }),
+            Expr::Super(_, identifier) => {
+                let depth = self.locals.get(&(expression as *const Expr));
+
+                match depth {
+                    Some(depth) => {
+                        // Get the parent class then start getting the methods from it
+                        let parent = environment.borrow().get_at("super", *depth).unwrap();
+                        let name = match &identifier.kind {
+                            TokenKind::Identifier(value) => value,
+                            _ => unimplemented!(),
+                        };
+
+                        match parent {
+                            DataType::Class(class) => match class.get(name) {
+                                Some(method) => {
+                                    let this = match environment
+                                        .borrow()
+                                        .get_at("this", depth - 1)
+                                        .unwrap()
+                                    {
+                                        DataType::Instance(instance) => instance,
+                                        _ => unimplemented!(),
+                                    };
+
+                                    Ok(DataType::Fun(Rc::new(method.bind(this))))
+                                }
+                                None => Err(Error::Runtime {
+                                    message: format!("{} method is undefined", name),
+                                    line: identifier.line,
+                                }),
+                            },
+                            _ => unimplemented!(),
+                        }
+                    }
+                    None => unimplemented!(),
+                }
+            }
             Expr::Unary(operator, expression) => {
                 let right = self.expression(expression, environment)?;
 

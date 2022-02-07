@@ -28,37 +28,23 @@ impl Var {
     }
 }
 
-#[derive(PartialEq)]
-enum ScopeKind {
-    Block,
-    Fun,
-}
-
-struct Scope {
-    kind: ScopeKind,
-    values: HashMap<String, Var>,
-}
-
-impl Scope {
-    fn new(kind: ScopeKind) -> Self {
-        Self {
-            kind,
-            values: HashMap::new(),
-        }
-    }
-}
-
 #[derive(Clone, PartialEq)]
 enum FunType {
     Fun,
     Init,
 }
 
+#[derive(Clone, PartialEq)]
+enum ClassType {
+    Super,
+    Sub,
+}
+
 pub struct Resolver<'a> {
     program: &'a [Statement],
-    scopes: Vec<Scope>,
+    scopes: Vec<HashMap<String, Var>>,
     current_fun: Option<FunType>,
-    in_class: bool,
+    current_class: Option<ClassType>,
 }
 
 impl<'a> Resolver<'a> {
@@ -67,28 +53,30 @@ impl<'a> Resolver<'a> {
             program,
             scopes: vec![],
             current_fun: None,
-            in_class: false,
+            current_class: None,
         }
     }
 
-    fn push_scope(&mut self, kind: ScopeKind) {
-        self.scopes.push(Scope::new(kind))
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new())
     }
     fn pop_scope<T: ErrorReporter>(&mut self, error_reporter: &mut T) {
         let last_scope = self.scopes.pop();
 
-        match last_scope {
-            Some(last_scope) => {
-                for (key, value) in last_scope.values.iter() {
-                    if !value.referenced {
-                        error_reporter.report(Error::Static {
-                            message: format!("{} is not used", key),
-                            line: value.line,
-                        });
+        if self.current_class.is_none() {
+            match last_scope {
+                Some(last_scope) => {
+                    for (key, value) in last_scope.iter() {
+                        if !value.referenced {
+                            error_reporter.report(Error::Static {
+                                message: format!("{} is not used", key),
+                                line: value.line,
+                            });
+                        }
                     }
                 }
+                None => {}
             }
-            None => {}
         }
     }
 
@@ -100,7 +88,6 @@ impl<'a> Resolver<'a> {
         self.scopes
             .last_mut()
             .unwrap()
-            .values
             .insert(String::from(name), Var::new(line));
     }
 
@@ -109,13 +96,7 @@ impl<'a> Resolver<'a> {
             return;
         }
 
-        let var = self
-            .scopes
-            .last_mut()
-            .unwrap()
-            .values
-            .get_mut(name)
-            .unwrap();
+        let var = self.scopes.last_mut().unwrap().get_mut(name).unwrap();
 
         var.define();
     }
@@ -124,9 +105,9 @@ impl<'a> Resolver<'a> {
         let mut depth = 0;
         let mut scopes_iter = self.scopes.iter_mut();
         while let Some(scope) = scopes_iter.next_back() {
-            if scope.values.contains_key(name) {
+            if scope.contains_key(name) {
                 // use the variable
-                scope.values.get_mut(name).unwrap().reference();
+                scope.get_mut(name).unwrap().reference();
                 interpreter.resolve(expression as *const Expr, depth);
                 break;
             }
@@ -144,15 +125,8 @@ impl<'a> Resolver<'a> {
             Expr::Literal(token) => match &token.kind {
                 TokenKind::Identifier(name) => {
                     if self.scopes.len() != 0
-                        && self.scopes.last().unwrap().values.get(name).is_some()
-                        && !self
-                            .scopes
-                            .last()
-                            .unwrap()
-                            .values
-                            .get(name)
-                            .unwrap()
-                            .defined
+                        && self.scopes.last().unwrap().get(name).is_some()
+                        && !self.scopes.last().unwrap().get(name).unwrap().defined
                     {
                         error_reporter.report(Error::Static {
                             message: String::from(
@@ -171,22 +145,21 @@ impl<'a> Resolver<'a> {
                             line: token.line,
                         })
                     } else {
-                        let mut depth = 0;
-                        let mut scopes_iter = self.scopes.iter();
-
-                        while let Some(scope) = scopes_iter.next_back() {
-                            if scope.kind == ScopeKind::Fun {
-                                break;
-                            }
-
-                            depth += 1;
-                        }
-
-                        interpreter.resolve(expression as *const Expr, depth);
+                        self.resolve_local("this", expression, interpreter);
                     }
                 }
                 _ => {}
             },
+            Expr::Super(token, _) => {
+                if self.current_class != Some(ClassType::Sub) {
+                    error_reporter.report(Error::Static {
+                        message: String::from("'super' can only be inside sub classes"),
+                        line: token.line,
+                    })
+                }
+
+                self.resolve_local("super", expression, interpreter);
+            }
             Expr::Binary(_token, expression_1, expression_2) => {
                 self.expression(expression_1, interpreter, error_reporter);
                 self.expression(expression_2, interpreter, error_reporter);
@@ -203,8 +176,16 @@ impl<'a> Resolver<'a> {
             Expr::Lamda(token, parameters, body) => {
                 let enclosing = self.current_fun.clone();
                 self.current_fun = Some(FunType::Fun);
-                self.push_scope(ScopeKind::Fun); // this scope
-                self.push_scope(ScopeKind::Block);
+                self.push_scope(); // this scope
+                self.declare("this", 0);
+                self.define("this");
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .get_mut("this")
+                    .unwrap()
+                    .reference();
+                self.push_scope();
 
                 for Token { kind, line: _ } in parameters.iter() {
                     match kind {
@@ -242,7 +223,7 @@ impl<'a> Resolver<'a> {
     ) {
         match statement {
             Statement::Block(statements) => {
-                self.push_scope(ScopeKind::Block);
+                self.push_scope();
                 for statement in statements {
                     self.statement(statement, interpreter, error_reporter);
                 }
@@ -260,13 +241,21 @@ impl<'a> Resolver<'a> {
                 self.declare(name, token.line);
                 self.define(name);
                 let enclosing = self.current_fun.clone();
-                self.current_fun = if name == "init" && self.in_class {
+                self.current_fun = if name == "init" && self.current_class.is_some() {
                     Some(FunType::Init)
                 } else {
                     Some(FunType::Fun)
                 };
-                self.push_scope(ScopeKind::Fun); // this scope
-                self.push_scope(ScopeKind::Block);
+                self.push_scope(); // this scope
+                self.declare("this", 0);
+                self.define("this");
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .get_mut("this")
+                    .unwrap()
+                    .reference();
+                self.push_scope();
 
                 for Token { kind, line } in parameters.iter() {
                     match kind {
@@ -320,7 +309,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             Statement::For(initializer, condition, increment, body) => {
-                self.push_scope(ScopeKind::Block);
+                self.push_scope();
                 match initializer {
                     Some(initializer) => self.statement(initializer, interpreter, error_reporter),
                     None => {}
@@ -353,11 +342,31 @@ impl<'a> Resolver<'a> {
                     None => {}
                 }
 
-                self.in_class = true;
+                if parent.is_some() {
+                    self.push_scope();
+                    self.declare("super", 0);
+                    self.define("super");
+                    self.scopes
+                        .last_mut()
+                        .unwrap()
+                        .get_mut("super")
+                        .unwrap()
+                        .reference();
+                }
+
+                let enclosing = self.current_class.clone();
+                self.current_class = Some(if parent.is_some() {
+                    ClassType::Sub
+                } else {
+                    ClassType::Super
+                });
                 for method in methods.iter() {
                     self.statement(method, interpreter, error_reporter);
                 }
-                self.in_class = false;
+                if parent.is_some() {
+                    self.pop_scope(error_reporter);
+                }
+                self.current_class = enclosing;
             }
         }
     }
